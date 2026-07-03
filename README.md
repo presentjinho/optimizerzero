@@ -16,6 +16,7 @@ Static browser version for Netlify-style sharing.
 - Download JSON report
 - Rejected-file feedback and total saved percentage
 - No server upload
+- JSZip is vendored locally under `vendor/`, so the app does not need an external CDN after deploy
 
 ## Limits
 

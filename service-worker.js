@@ -7,16 +7,11 @@ const APP_ASSETS = [
   "./README.md",
   "./manifest.webmanifest",
   "./icon.svg",
+  "./vendor/jszip.min.js",
 ];
-const OPTIONAL_ASSETS = ["https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(async (cache) => {
-      await cache.addAll(APP_ASSETS);
-      await Promise.allSettled(OPTIONAL_ASSETS.map((asset) => cache.add(asset)));
-    }),
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_ASSETS)));
   self.skipWaiting();
 });
 
