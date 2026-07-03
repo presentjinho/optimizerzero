@@ -7,6 +7,7 @@ Static browser version for Netlify-style sharing.
 - ZIP/CBZ/EPUB/DOCX/PPTX/XLSX recompression with JSZip
 - PNG/JPG/WEBP browser-side image recompression
 - Loss budget and quality control for standalone image conversion
+- Per-file target size and minimum-savings controls
 - Purpose presets for archive, sharing, messenger, email, and quality-first use
 - PWA cache for reopening after the first visit
 - Download optimized copies
