@@ -143,6 +143,7 @@ function render() {
 
 function applyIntent() {
   const preset = intentPresets[el.intent.value] || intentPresets.share;
+  const selectedIntent = el.intent.selectedOptions[0];
   el.profile.value = preset.profile;
   el.lossBudget.value = preset.lossBudget;
   el.quality.value = String(preset.quality);
@@ -150,7 +151,7 @@ function applyIntent() {
   el.minSavings.value = String(preset.minSavings);
   el.limit.value = String(preset.limit);
   el.qualityLabel.textContent = String(preset.quality);
-  document.querySelector("#recommendation").textContent = preset.message;
+  document.querySelector("#recommendation").textContent = selectedIntent?.dataset.message || preset.message;
   render();
 }
 
