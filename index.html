@@ -6,7 +6,7 @@
     <title>OptimizerZero Web Lite</title>
     <meta
       name="description"
-      content="파일을 서버에 올리지 않고 브라우저에서 압축 전략을 고르고 최적화합니다."
+      content="파일을 서버에 올리지 않고 브라우저 안에서 압축 전략을 고르고 최적화합니다."
     />
     <meta name="robots" content="noindex,nofollow,noarchive" />
     <meta name="theme-color" content="#111312" />
@@ -22,7 +22,7 @@
           <h1>OptimizerZero Web Lite</h1>
           <p class="summary">
             서버 업로드 없이 ZIP, CBZ, EPUB, Office 컨테이너와 이미지를 줄입니다.
-            한 번 열면 브라우저에 캐시되어 오프라인에서도 다시 열 수 있습니다.
+            한번 열면 브라우저에 캐시되어 오프라인에서도 다시 열 수 있습니다.
           </p>
           <p id="appStatus" class="status-pill">ready</p>
         </div>
@@ -43,8 +43,8 @@
               <option value="archive">보관용 - 원본 보존 우선</option>
               <option value="share" selected>공유용 - 적당히 작게</option>
               <option value="messenger">메신저용 - 용량 우선</option>
-              <option value="email">이메일 첨부 - 파일 크기 제한</option>
-              <option value="quality">품질 우선 - 최소 손실</option>
+              <option value="email">이메일 첨부 - 크기 제한</option>
+              <option value="quality">화질 우선 - 최소 손실</option>
             </select>
           </label>
           <label>
@@ -56,21 +56,40 @@
             </select>
           </label>
           <label>
-            <span>손실 허용도</span>
+            <span>손실 허용</span>
             <select id="lossBudget">
               <option value="">목적 기준</option>
               <option value="none">none - 원본 보존</option>
               <option value="low">low - 거의 티 안 나게</option>
-              <option value="medium">medium - 더 작게</option>
+              <option value="medium">medium - 적당히 작게</option>
               <option value="high">high - 용량 우선</option>
             </select>
           </label>
           <label>
-            <span>이미지 품질 <b id="qualityLabel">88</b></span>
+            <span>이미지 화질 <b id="qualityLabel">88</b></span>
             <input id="quality" type="range" min="45" max="96" value="88" />
           </label>
           <label>
-            <span>최대 파일 크기</span>
+            <span>파일당 목표 용량</span>
+            <select id="targetSize">
+              <option value="0">제한 없음</option>
+              <option value="5">5 MB</option>
+              <option value="10">10 MB</option>
+              <option value="25">25 MB</option>
+              <option value="50">50 MB</option>
+            </select>
+          </label>
+          <label>
+            <span>최소 절감률</span>
+            <select id="minSavings">
+              <option value="0">0%</option>
+              <option value="1" selected>1%</option>
+              <option value="3">3%</option>
+              <option value="5">5%</option>
+            </select>
+          </label>
+          <label>
+            <span>최대 입력 크기</span>
             <select id="limit">
               <option value="25">25 MB</option>
               <option value="75" selected>75 MB</option>
@@ -80,7 +99,7 @@
         </div>
 
         <div id="recommendation" class="recommendation">
-          공유용 추천: 균형 압축, 낮은 손실, 품질 88.
+          공유용 추천: 균형 압축, 낮은 손실, 화질 88.
         </div>
 
         <div class="action-row">
