@@ -24,6 +24,12 @@
 - [ ] `manifest.webmanifest` 접속 가능
 - [ ] `service-worker.js` 접속 가능
 
+## 2-1. CLI 직접 배포 선택지
+
+- [ ] `.\deploy-cloudflare.ps1`로 검증과 배포 명령 확인
+- [ ] `.\deploy-cloudflare.ps1 -Deploy`로 Wrangler 직접 업로드
+- [ ] 필요 시 Wrangler 브라우저 로그인 또는 `CLOUDFLARE_API_TOKEN` 설정
+
 ## 3. Access로 진짜 비공개 잠금
 
 Cloudflare Pages URL은 기본 public이다. 아래를 끝내야 진짜 비공개다.

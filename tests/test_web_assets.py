@@ -102,6 +102,15 @@ class WebAssetTests(unittest.TestCase):
         self.assertNotIn("api", wrangler.lower())
         self.assertNotIn("token", wrangler.lower())
 
+    def test_cloudflare_deploy_script_is_explicit(self):
+        script = (ROOT / "deploy-cloudflare.ps1").read_text(encoding="utf-8")
+
+        self.assertIn("[switch]$Deploy", script)
+        self.assertIn("Dry run only", script)
+        self.assertIn("wrangler@latest", script)
+        self.assertIn("--project-name", script)
+        self.assertIn("optimizerzero", script)
+
     def test_app_reports_archive_dependency_status(self):
         app = self.read("app.js")
 

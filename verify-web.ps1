@@ -27,6 +27,8 @@ Assert-TextContains -Path "web\PRIVACY.md" -Needle "does not include analytics"
 Assert-TextContains -Path "web\service-worker.js" -Needle 'caches.match("./index.html")'
 Assert-TextContains -Path "wrangler.toml" -Needle 'pages_build_output_dir = "./web"'
 Assert-TextContains -Path "wrangler.toml" -Needle 'name = "optimizerzero"'
+Assert-TextContains -Path "deploy-cloudflare.ps1" -Needle "Dry run only"
+Assert-TextContains -Path "deploy-cloudflare.ps1" -Needle "wrangler@latest"
 
 if (-not (Test-Path -LiteralPath "web\vendor\JSZIP_LICENSE.markdown")) {
   throw "Missing JSZip license file."

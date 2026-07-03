@@ -60,6 +60,18 @@ Cloudflare Access:
 
 세부 체크리스트는 `docs/CLOUDFLARE_PRIVATE_CHECKLIST_KO.md`를 따른다.
 
+## CLI 직접 배포
+
+Cloudflare dashboard 연결 전에 수동 업로드로 먼저 확인하려면:
+
+```powershell
+.\deploy-cloudflare.ps1
+.\deploy-cloudflare.ps1 -Deploy
+```
+
+첫 명령은 검증과 배포 명령 출력만 한다. 실제 업로드는 `-Deploy`를 붙였을 때만 실행된다.
+Cloudflare 로그인은 Wrangler 브라우저 로그인 또는 `CLOUDFLARE_API_TOKEN` 환경변수가 필요할 수 있다.
+
 ## 공개 전환할 때
 
 공개로 전환하려면:
