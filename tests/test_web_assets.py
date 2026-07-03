@@ -111,6 +111,16 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("--project-name", script)
         self.assertIn("optimizerzero", script)
 
+    def test_cloudflare_deploy_workflow_is_manual(self):
+        workflow = (ROOT / ".github" / "workflows" / "deploy-cloudflare.yml").read_text(encoding="utf-8")
+
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("push:", workflow)
+        self.assertIn("CLOUDFLARE_API_TOKEN", workflow)
+        self.assertIn("CLOUDFLARE_ACCOUNT_ID", workflow)
+        self.assertIn("cloudflare/wrangler-action@v3", workflow)
+        self.assertIn("pages deploy web --project-name optimizerzero", workflow)
+
     def test_app_reports_archive_dependency_status(self):
         app = self.read("app.js")
 

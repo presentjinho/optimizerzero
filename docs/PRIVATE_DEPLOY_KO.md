@@ -72,6 +72,16 @@ Cloudflare dashboard 연결 전에 수동 업로드로 먼저 확인하려면:
 첫 명령은 검증과 배포 명령 출력만 한다. 실제 업로드는 `-Deploy`를 붙였을 때만 실행된다.
 Cloudflare 로그인은 Wrangler 브라우저 로그인 또는 `CLOUDFLARE_API_TOKEN` 환경변수가 필요할 수 있다.
 
+## GitHub Actions 수동 배포
+
+PC를 켜지 않고 GitHub에서 배포 버튼으로 올리려면 repository secret을 먼저 추가한다.
+
+- `CLOUDFLARE_API_TOKEN`: Cloudflare Pages Edit 권한이 있는 API token
+- `CLOUDFLARE_ACCOUNT_ID`: Cloudflare account ID
+
+그 다음 GitHub Actions에서 `Deploy Cloudflare Pages` workflow를 수동 실행한다.
+이 workflow는 자동 배포가 아니라 `workflow_dispatch` 버튼 실행만 허용한다.
+
 ## 공개 전환할 때
 
 공개로 전환하려면:

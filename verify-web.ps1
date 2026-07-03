@@ -29,6 +29,9 @@ Assert-TextContains -Path "wrangler.toml" -Needle 'pages_build_output_dir = "./w
 Assert-TextContains -Path "wrangler.toml" -Needle 'name = "optimizerzero"'
 Assert-TextContains -Path "deploy-cloudflare.ps1" -Needle "Dry run only"
 Assert-TextContains -Path "deploy-cloudflare.ps1" -Needle "wrangler@latest"
+Assert-TextContains -Path ".github\workflows\deploy-cloudflare.yml" -Needle "workflow_dispatch:"
+Assert-TextContains -Path ".github\workflows\deploy-cloudflare.yml" -Needle "cloudflare/wrangler-action@v3"
+Assert-TextContains -Path ".github\workflows\deploy-cloudflare.yml" -Needle "pages deploy web --project-name optimizerzero"
 
 if (-not (Test-Path -LiteralPath "web\vendor\JSZIP_LICENSE.markdown")) {
   throw "Missing JSZip license file."

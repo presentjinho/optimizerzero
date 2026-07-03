@@ -30,6 +30,15 @@
 - [ ] `.\deploy-cloudflare.ps1 -Deploy`로 Wrangler 직접 업로드
 - [ ] 필요 시 Wrangler 브라우저 로그인 또는 `CLOUDFLARE_API_TOKEN` 설정
 
+## 2-2. GitHub Actions 수동 배포 선택지
+
+- [ ] GitHub repo > Settings > Secrets and variables > Actions
+- [ ] `CLOUDFLARE_API_TOKEN` 추가
+- [ ] `CLOUDFLARE_ACCOUNT_ID` 추가
+- [ ] Actions > `Deploy Cloudflare Pages`
+- [ ] Run workflow
+- [ ] branch: `main`
+
 ## 3. Access로 진짜 비공개 잠금
 
 Cloudflare Pages URL은 기본 public이다. 아래를 끝내야 진짜 비공개다.
