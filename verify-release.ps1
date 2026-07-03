@@ -30,7 +30,9 @@ if (Test-Path -LiteralPath $WebZip) {
     "manifest.webmanifest",
     "icon.svg",
     "robots.txt",
-    "_headers"
+    "_headers",
+    "vendor/jszip.min.js",
+    "vendor/JSZIP_LICENSE.markdown"
   )
   $entries = (tar -tf $WebZip) | ForEach-Object { $_.TrimStart("./") }
   foreach ($entry in $requiredWebEntries) {
