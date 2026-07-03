@@ -70,6 +70,14 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("Promise.allSettled", worker)
         self.assertIn('caches.match("./index.html")', worker)
 
+    def test_app_reports_archive_dependency_status(self):
+        app = self.read("app.js")
+
+        self.assertIn("dependencyStatus", app)
+        self.assertIn("archive engine ready", app)
+        self.assertIn("image-only / archive engine unavailable", app)
+        self.assertIn("Archive engine unavailable. Standalone images still work.", app)
+
     def test_web_javascript_syntax(self):
         for script in ("app.js", "service-worker.js"):
             with self.subTest(script=script):

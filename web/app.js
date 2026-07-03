@@ -222,6 +222,15 @@ function setAppStatus(text) {
   if (el.appStatus) el.appStatus.textContent = text;
 }
 
+function dependencyStatus() {
+  return window.JSZip ? "archive engine ready" : "image-only / archive engine unavailable";
+}
+
+function refreshAppStatus() {
+  const network = navigator.onLine ? "online" : "offline";
+  setAppStatus(`${network} / cached / ${dependencyStatus()}`);
+}
+
 function imageMimeForExt(ext) {
   if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
   if (ext === "webp") return "image/webp";
@@ -272,7 +281,7 @@ async function maybeOptimizeArchiveEntry(fileExt, cleanName, data) {
 }
 
 async function optimizeArchive(file) {
-  if (!window.JSZip) throw new Error("JSZip failed to load");
+  if (!window.JSZip) throw new Error("Archive engine unavailable. Standalone images still work.");
   const fileExt = extOf(file);
   const source = await JSZip.loadAsync(file);
   const output = new JSZip();
@@ -370,7 +379,10 @@ function saveReport() {
 }
 
 async function saveBundle() {
-  if (!window.JSZip) return;
+  if (!window.JSZip) {
+    setAppStatus("archive engine unavailable / bundle disabled");
+    return;
+  }
   const zip = new JSZip();
   for (const result of optimizedResults()) {
     zip.file(result.outName || result.name, result.blob);
@@ -419,13 +431,13 @@ el.clearButton.addEventListener("click", () => {
 });
 el.reportButton.addEventListener("click", saveReport);
 el.bundleButton.addEventListener("click", saveBundle);
-window.addEventListener("online", () => setAppStatus("online / cached"));
-window.addEventListener("offline", () => setAppStatus("offline / cached"));
+window.addEventListener("online", refreshAppStatus);
+window.addEventListener("offline", refreshAppStatus);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker
     .register("./service-worker.js")
-    .then(() => setAppStatus(navigator.onLine ? "online / cached" : "offline / cached"))
-    .catch(() => setAppStatus("online"));
+    .then(refreshAppStatus)
+    .catch(refreshAppStatus);
 }
 
 window.__optimizerZeroWeb = {
@@ -433,7 +445,9 @@ window.__optimizerZeroWeb = {
   optimizeArchive,
   optimizeImageFile,
   outputAccepted,
+  dependencyStatus,
 };
 
+refreshAppStatus();
 applyIntent();
 render();
