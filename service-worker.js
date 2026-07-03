@@ -7,11 +7,16 @@ const APP_ASSETS = [
   "./README.md",
   "./manifest.webmanifest",
   "./icon.svg",
-  "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
 ];
+const OPTIONAL_ASSETS = ["https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_ASSETS)));
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await cache.addAll(APP_ASSETS);
+      await Promise.allSettled(OPTIONAL_ASSETS.map((asset) => cache.add(asset)));
+    }),
+  );
   self.skipWaiting();
 });
 
@@ -29,11 +34,13 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-        return response;
-      });
+      return fetch(event.request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          return response;
+        })
+        .catch(() => caches.match("./index.html"));
     }),
   );
 });
