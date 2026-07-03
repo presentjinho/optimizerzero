@@ -28,7 +28,16 @@ class WebAssetTests(unittest.TestCase):
         return (WEB / relative).read_text(encoding="utf-8")
 
     def test_web_assets_are_valid_utf8_without_mojibake(self):
-        bad_markers = ("�", "蹂", "怨", "硫", "釉", "뚯", "쒕", "덉")
+        bad_markers = (
+            "\ufffd",
+            "\u8e42",
+            "\u6028",
+            "\uf9ce",
+            "\u91c9",
+            "\ub6af",
+            "\uc495",
+            "\ub369",
+        )
         for path in WEB.glob("*"):
             if path.suffix.lower() in {".html", ".js", ".css", ".json", ".webmanifest", ".md"} or path.name in {"_headers", "robots.txt"}:
                 text = path.read_text(encoding="utf-8")
@@ -52,7 +61,7 @@ class WebAssetTests(unittest.TestCase):
         self.assertEqual(len(intent_options), 5)
         for option in intent_options:
             message = option.get("data-message", "")
-            self.assertIn("추천", message)
+            self.assertIn("\ucd94\ucc9c", message)
 
     def test_service_worker_caches_required_assets(self):
         worker = self.read("service-worker.js")
