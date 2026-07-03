@@ -10,7 +10,10 @@
 - [ ] Production branch: `main`
 - [ ] Build command: 비움
 - [ ] Build output directory: `web`
+- [ ] `wrangler.toml` 확인: `pages_build_output_dir = "./web"`
 - [ ] Deploy
+
+주의: `wrangler.toml`을 Cloudflare Pages 설정으로 쓰면 이 파일이 Pages 설정의 기준이 된다. Cloudflare dashboard에서 이미 다른 설정을 먼저 만들었다면 배포 전 dashboard 설정과 `wrangler.toml`이 같은지 확인한다.
 
 ## 2. 배포 직후 확인
 

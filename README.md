@@ -74,6 +74,7 @@ OptimizerZero preserves image file formats in archives. The Web Lite app convert
 - not meant for heavy PDF cleanup or very large folders
 
 Deploy with `netlify.toml` or set the publish directory to `web`.
+Cloudflare Pages can also read `wrangler.toml`, which points Pages at `./web`.
 
 See `docs/STRATEGY_KO.md` for positioning and sharing strategy.
 See `docs/DEPLOY_FREE_KO.md` for free hosting and domain options.

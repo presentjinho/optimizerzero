@@ -36,6 +36,9 @@ Cloudflare Pages:
 - build command: 비움
 - publish directory: `web`
 - production branch: `main`
+- repo config: `wrangler.toml` includes `pages_build_output_dir = "./web"`
+
+`wrangler.toml`을 쓰면 Cloudflare Pages에서 이 파일이 설정 기준이 된다. 이미 dashboard에서 프로젝트를 만든 뒤 설정을 바꿨다면, 배포 전에 dashboard 설정과 파일 설정이 같은지 확인한다.
 
 Cloudflare Access:
 

@@ -94,6 +94,14 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("does not include analytics", privacy)
         self.assertIn("JSZip is bundled", privacy)
 
+    def test_cloudflare_pages_config_points_to_web(self):
+        wrangler = (ROOT / "wrangler.toml").read_text(encoding="utf-8")
+
+        self.assertIn('name = "optimizerzero"', wrangler)
+        self.assertIn('pages_build_output_dir = "./web"', wrangler)
+        self.assertNotIn("api", wrangler.lower())
+        self.assertNotIn("token", wrangler.lower())
+
     def test_app_reports_archive_dependency_status(self):
         app = self.read("app.js")
 
