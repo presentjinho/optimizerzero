@@ -5,6 +5,7 @@ const APP_ASSETS = [
   "./styles.css",
   "./app.js",
   "./README.md",
+  "./PRIVACY.md",
   "./manifest.webmanifest",
   "./icon.svg",
   "./vendor/jszip.min.js",

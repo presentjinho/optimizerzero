@@ -18,6 +18,8 @@ Static browser version for Netlify-style sharing.
 - No server upload
 - JSZip is vendored locally under `vendor/`, so the app does not need an external CDN after deploy
 
+See `PRIVACY.md` for the local-processing/privacy note.
+
 ## Limits
 
 - Large files depend on browser memory.
