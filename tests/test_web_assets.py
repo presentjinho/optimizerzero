@@ -58,6 +58,8 @@ class WebAssetTests(unittest.TestCase):
         worker = self.read("service-worker.js")
         for asset in ("./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icon.svg"):
             self.assertIn(asset, worker)
+        self.assertIn("Promise.allSettled", worker)
+        self.assertIn('caches.match("./index.html")', worker)
 
     def test_web_javascript_syntax(self):
         for script in ("app.js", "service-worker.js"):

@@ -25,13 +25,11 @@ New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 $zipName = if ($IncludePdf) { "OptimizerZero-0.1.0-windows-pdf.zip" } else { "OptimizerZero-0.1.0-windows-lite.zip" }
 $zipPath = Join-Path $releaseDir $zipName
 Compress-Archive -LiteralPath (Join-Path $PSScriptRoot "dist\OptimizerZero") -DestinationPath $zipPath -Force
-& (Join-Path $PSScriptRoot "verify-release.ps1") -ReleaseZip $zipPath
 
 $webZipPath = Join-Path $releaseDir "OptimizerZero-0.1.0-web-lite.zip"
 $webFiles = Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot "web") -Force
 Compress-Archive -Path $webFiles.FullName -DestinationPath $webZipPath -Force
-$webHash = Get-FileHash -Algorithm SHA256 -LiteralPath $webZipPath
-"$($webHash.Hash)  $(Split-Path -Leaf $webZipPath)" | Set-Content -LiteralPath "$webZipPath.sha256" -Encoding ASCII
+& (Join-Path $PSScriptRoot "verify-release.ps1") -ReleaseZip $zipPath -WebZip $webZipPath
 
 Write-Host "Packaged: $zipPath"
 Write-Host "Packaged: $webZipPath"
