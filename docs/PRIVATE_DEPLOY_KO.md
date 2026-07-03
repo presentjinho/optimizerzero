@@ -55,6 +55,8 @@ Cloudflare Access:
 6. 내 이메일로 접속 테스트
 7. 필요할 때만 테스트 사용자 이메일 추가
 
+세부 체크리스트는 `docs/CLOUDFLARE_PRIVATE_CHECKLIST_KO.md`를 따른다.
+
 ## 공개 전환할 때
 
 공개로 전환하려면:
