@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+      - name: Compile
+        run: |
+          python -m compileall src gui_entry.py
+      - name: Test
+        run: |
+          python -m unittest discover -s tests -v
+
+  build-windows:
+    runs-on: windows-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+          cache: pip
+      - name: Build lightweight GUI
+        shell: pwsh
+        run: .\build-windows.ps1
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OptimizerZero-windows
+          path: dist/OptimizerZero
