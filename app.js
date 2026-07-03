@@ -1,5 +1,6 @@
 const archiveExts = new Set(["zip", "cbz", "epub", "docx", "pptx", "xlsx"]);
 const imageExts = new Set(["png", "jpg", "jpeg", "webp"]);
+const archiveImageExts = new Set(["jpg", "jpeg", "webp"]);
 const state = { files: [], rejected: [], results: [] };
 const el = {
   dropZone: document.querySelector("#dropZone"),
@@ -32,7 +33,7 @@ const intentPresets = {
     targetSize: 0,
     minSavings: 0,
     limit: 150,
-    message: "보관용 추천: 원본 보존, 무손실 중심, 큰 파일 허용.",
+    message: "Archive: preserve originals, lossless-first, larger input allowed.",
   },
   share: {
     profile: "balanced",
@@ -41,7 +42,7 @@ const intentPresets = {
     targetSize: 0,
     minSavings: 1,
     limit: 75,
-    message: "공유용 추천: 균형 압축, 낮은 손실, 화질 88.",
+    message: "Share: balanced compression, low visual loss, quality 88.",
   },
   messenger: {
     profile: "strong",
@@ -50,7 +51,7 @@ const intentPresets = {
     targetSize: 10,
     minSavings: 3,
     limit: 25,
-    message: "메신저용 추천: 용량 우선, 결과 확인 후 사용.",
+    message: "Messenger: size first. Check the result before sharing.",
   },
   email: {
     profile: "balanced",
@@ -59,7 +60,7 @@ const intentPresets = {
     targetSize: 25,
     minSavings: 1,
     limit: 25,
-    message: "이메일 추천: 첨부 제한에 맞추고 중간 손실 압축.",
+    message: "Email: fit attachment limits with moderate visual loss.",
   },
   quality: {
     profile: "balanced",
@@ -68,12 +69,16 @@ const intentPresets = {
     targetSize: 0,
     minSavings: 1,
     limit: 150,
-    message: "화질 우선 추천: 거의 티 안 나게, 절감이 작으면 스킵.",
+    message: "Quality: near-original look. Skip tiny savings.",
   },
 };
 
+function extOfName(name) {
+  return (name.split(".").pop() || "").toLowerCase();
+}
+
 function extOf(file) {
-  return (file.name.split(".").pop() || "").toLowerCase();
+  return extOfName(file.name);
 }
 
 function formatBytes(bytes) {
@@ -97,9 +102,9 @@ function setFiles(files) {
   state.rejected = [];
   for (const file of files) {
     if (!supported(file)) {
-      state.rejected.push({ name: file.name, reason: "지원하지 않는 형식" });
+      state.rejected.push({ name: file.name, reason: "unsupported type" });
     } else if (file.size > maxBytes) {
-      state.rejected.push({ name: file.name, reason: `${el.limit.value} MB 초과` });
+      state.rejected.push({ name: file.name, reason: `over ${el.limit.value} MB` });
     } else {
       incoming.push(file);
     }
@@ -116,20 +121,20 @@ function render() {
   el.fileList.innerHTML = "";
   el.emptyState.hidden = state.files.length > 0;
   const totalSize = state.files.reduce((sum, file) => sum + file.size, 0);
-  const rejected = state.rejected.length ? ` / 제외 ${state.rejected.length}` : "";
+  const rejected = state.rejected.length ? ` / rejected ${state.rejected.length}` : "";
   el.totals.textContent = `${state.files.length} files / ${formatBytes(totalSize)}${rejected}`;
   for (const file of state.files) {
     const row = el.rowTemplate.content.firstElementChild.cloneNode(true);
     row.dataset.name = file.name;
     row.querySelector(".file-name").textContent = file.name;
     row.querySelector(".file-meta").textContent = `${extOf(file).toUpperCase()} / ${formatBytes(file.size)}`;
-    row.querySelector(".file-status").textContent = "대기";
+    row.querySelector(".file-status").textContent = "ready";
     el.fileList.append(row);
   }
   for (const item of state.rejected) {
     const row = el.rowTemplate.content.firstElementChild.cloneNode(true);
     row.querySelector(".file-name").textContent = item.name;
-    row.querySelector(".file-meta").textContent = "목록 제외";
+    row.querySelector(".file-meta").textContent = "not queued";
     row.querySelector(".file-status").textContent = item.reason;
     row.querySelector(".file-status").className = "file-status error";
     el.fileList.append(row);
@@ -199,15 +204,15 @@ function minSavingsPercent() {
 }
 
 function outputAccepted(originalSize, outputSize) {
-  if (outputSize >= originalSize) return { ok: false, message: "더 작아지지 않음" };
+  if (outputSize >= originalSize) return { ok: false, message: "not smaller" };
   const saved = originalSize - outputSize;
   const pct = originalSize ? (saved / originalSize) * 100 : 0;
   if (pct < minSavingsPercent()) {
-    return { ok: false, message: `절감 ${pct.toFixed(2)}%, 기준 ${minSavingsPercent()}% 미만` };
+    return { ok: false, message: `saved ${pct.toFixed(2)}%, below ${minSavingsPercent()}%` };
   }
   const target = targetSizeBytes();
   if (target > 0 && outputSize > target) {
-    return { ok: false, message: `목표 ${formatBytes(target)} 초과` };
+    return { ok: false, message: `over target ${formatBytes(target)}` };
   }
   return { ok: true, saved };
 }
@@ -216,20 +221,26 @@ function setAppStatus(text) {
   if (el.appStatus) el.appStatus.textContent = text;
 }
 
-async function recompressImage(blob) {
+function imageMimeForExt(ext) {
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "webp") return "image/webp";
+  return "image/webp";
+}
+
+async function recompressImage(blob, mimeType = "image/webp") {
   const image = await createImageBitmap(blob);
   const canvas = document.createElement("canvas");
   canvas.width = image.width;
   canvas.height = image.height;
-  const ctx = canvas.getContext("2d", { alpha: false });
+  const ctx = canvas.getContext("2d", { alpha: mimeType === "image/png" });
   ctx.drawImage(image, 0, 0);
-  return new Promise((resolve) => canvas.toBlob(resolve, "image/webp", selectedQuality()));
+  return new Promise((resolve) => canvas.toBlob(resolve, mimeType, selectedQuality()));
 }
 
 async function optimizeImageFile(file) {
-  if (lossBudget() === "none") return { status: "skipped", message: "손실 허용 없음" };
-  const blob = await recompressImage(file);
-  if (!blob) return { status: "skipped", message: "변환 실패" };
+  if (lossBudget() === "none") return { status: "skipped", message: "loss budget is none" };
+  const blob = await recompressImage(file, "image/webp");
+  if (!blob) return { status: "skipped", message: "conversion failed" };
   const accepted = outputAccepted(file.size, blob.size);
   if (!accepted.ok) return { status: "skipped", message: accepted.message };
   const outName = file.name.replace(/(\.[^.]+)?$/, ".ozero.webp");
@@ -239,21 +250,40 @@ async function optimizeImageFile(file) {
 function safeArchiveName(name) {
   const cleanName = name.replaceAll("\\", "/").replace(/^\/+/, "");
   if (!cleanName || cleanName.includes("../") || cleanName.startsWith("..")) {
-    throw new Error(`위험한 경로: ${name}`);
+    throw new Error(`unsafe path: ${name}`);
   }
   return cleanName;
 }
 
+function canRecompressArchiveImages(fileExt) {
+  return lossBudget() !== "none" && (fileExt === "zip" || fileExt === "cbz");
+}
+
+async function maybeOptimizeArchiveEntry(fileExt, cleanName, data) {
+  const entryExt = extOfName(cleanName);
+  if (!canRecompressArchiveImages(fileExt) || !archiveImageExts.has(entryExt)) {
+    return { blob: data, changed: false };
+  }
+  const mimeType = imageMimeForExt(entryExt);
+  const optimized = await recompressImage(data, mimeType);
+  if (!optimized || optimized.size >= data.size) return { blob: data, changed: false };
+  return { blob: optimized, changed: true };
+}
+
 async function optimizeArchive(file) {
-  if (!window.JSZip) throw new Error("JSZip 로드 실패");
+  if (!window.JSZip) throw new Error("JSZip failed to load");
+  const fileExt = extOf(file);
   const source = await JSZip.loadAsync(file);
   const output = new JSZip();
+  let imageEntriesOptimized = 0;
   for (const [name, entry] of Object.entries(source.files)) {
     if (entry.dir) continue;
     const cleanName = safeArchiveName(name);
     const data = await entry.async("blob");
-    const compression = extOf(file) === "epub" && cleanName === "mimetype" ? "STORE" : "DEFLATE";
-    output.file(cleanName, data, { compression });
+    const entryResult = await maybeOptimizeArchiveEntry(fileExt, cleanName, data);
+    imageEntriesOptimized += entryResult.changed ? 1 : 0;
+    const compression = fileExt === "epub" && cleanName === "mimetype" ? "STORE" : "DEFLATE";
+    output.file(cleanName, entryResult.blob, { compression });
   }
   const blob = await output.generateAsync({
     type: "blob",
@@ -264,14 +294,15 @@ async function optimizeArchive(file) {
   const accepted = outputAccepted(file.size, blob.size);
   if (!accepted.ok) return { status: "skipped", message: accepted.message };
   const outName = file.name.replace(/(\.[^.]+)$/, ".ozero$1");
-  return { status: "optimized", blob, outName, saved: accepted.saved, message: "컨테이너 재압축" };
+  const detail = imageEntriesOptimized ? `container + ${imageEntriesOptimized} image entries` : "container recompressed";
+  return { status: "optimized", blob, outName, saved: accepted.saved, message: detail };
 }
 
 async function optimizeFile(file) {
   const ext = extOf(file);
   if (imageExts.has(ext)) return optimizeImageFile(file);
   if (archiveExts.has(ext)) return optimizeArchive(file);
-  return { status: "skipped", message: "지원하지 않는 형식" };
+  return { status: "skipped", message: "unsupported" };
 }
 
 async function run() {
@@ -281,7 +312,7 @@ async function run() {
   el.reportButton.disabled = true;
   el.bundleButton.disabled = true;
   for (const [index, file] of state.files.entries()) {
-    updateRow(file, "작업 중...");
+    updateRow(file, "working...");
     try {
       const result = await optimizeFile(file);
       const record = {
@@ -296,7 +327,7 @@ async function run() {
       };
       state.results.push(record);
       if (result.blob) attachDownload(file, result.blob, result.outName);
-      const label = result.status === "optimized" ? `${formatBytes(result.saved)} 절감` : result.message;
+      const label = result.status === "optimized" ? `saved ${formatBytes(result.saved)}` : result.message;
       updateRow(file, label, result.status === "optimized" ? "done" : "");
     } catch (error) {
       state.results.push({ name: file.name, status: "error", message: error.message, originalSize: file.size });
@@ -395,5 +426,13 @@ if ("serviceWorker" in navigator) {
     .then(() => setAppStatus(navigator.onLine ? "online / cached" : "offline / cached"))
     .catch(() => setAppStatus("online"));
 }
+
+window.__optimizerZeroWeb = {
+  optimizeFile,
+  optimizeArchive,
+  optimizeImageFile,
+  outputAccepted,
+};
+
 applyIntent();
 render();

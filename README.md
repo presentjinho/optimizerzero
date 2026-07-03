@@ -5,6 +5,7 @@ Static browser version for Netlify-style sharing.
 ## What Works
 
 - ZIP/CBZ/EPUB/DOCX/PPTX/XLSX recompression with JSZip
+- JPG/JPEG/WEBP recompression inside ZIP/CBZ when visual loss is allowed
 - PNG/JPG/WEBP browser-side image recompression
 - Loss budget and quality control for standalone image conversion
 - Per-file target size and minimum-savings controls
@@ -22,7 +23,8 @@ Static browser version for Netlify-style sharing.
 - PDF cleanup is desktop/Python only.
 - Encrypted archives are not supported.
 - Browser image conversion uses WebP output for standalone images.
-- Archive entries keep their original file names and formats.
+- Archive image recompression is limited to ZIP/CBZ JPG/JPEG/WEBP entries.
+- EPUB and Office files use safe container recompression only.
 
 ## Deploy
 
