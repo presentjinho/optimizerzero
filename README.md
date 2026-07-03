@@ -66,6 +66,7 @@ OptimizerZero preserves image file formats in archives. The Web Lite app convert
 - files stay in the browser
 - PWA cache lets visitors reopen the app after the first visit
 - intent presets choose practical defaults for archive, sharing, messenger, email, and quality-first use
+- ZIP/CBZ can recompress JPG/JPEG/WEBP entries in the browser when visual loss is allowed
 - good for small ZIP/CBZ/EPUB/Office containers and standalone images
 - not meant for heavy PDF cleanup or very large folders
 
