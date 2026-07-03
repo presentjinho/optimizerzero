@@ -65,7 +65,15 @@ class WebAssetTests(unittest.TestCase):
 
     def test_service_worker_caches_required_assets(self):
         worker = self.read("service-worker.js")
-        for asset in ("./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icon.svg", "./vendor/jszip.min.js"):
+        for asset in (
+            "./index.html",
+            "./styles.css",
+            "./app.js",
+            "./PRIVACY.md",
+            "./manifest.webmanifest",
+            "./icon.svg",
+            "./vendor/jszip.min.js",
+        ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
 
@@ -78,6 +86,13 @@ class WebAssetTests(unittest.TestCase):
         self.assertNotIn("cdn.jsdelivr.net", html)
         self.assertNotIn("cdn.jsdelivr.net", worker)
         self.assertTrue((WEB / "vendor" / "JSZIP_LICENSE.markdown").exists())
+
+    def test_privacy_note_matches_local_first_claims(self):
+        privacy = self.read("PRIVACY.md")
+
+        self.assertIn("not uploaded", privacy)
+        self.assertIn("does not include analytics", privacy)
+        self.assertIn("JSZip is bundled", privacy)
 
     def test_app_reports_archive_dependency_status(self):
         app = self.read("app.js")

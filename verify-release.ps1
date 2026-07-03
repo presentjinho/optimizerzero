@@ -25,6 +25,7 @@ if (Test-Path -LiteralPath $WebZip) {
   $requiredWebEntries = @(
     "index.html",
     "app.js",
+    "PRIVACY.md",
     "styles.css",
     "service-worker.js",
     "manifest.webmanifest",

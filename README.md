@@ -77,6 +77,7 @@ Deploy with `netlify.toml` or set the publish directory to `web`.
 See `docs/STRATEGY_KO.md` for positioning and sharing strategy.
 See `docs/DEPLOY_FREE_KO.md` for free hosting and domain options.
 See `docs/PRIVATE_DEPLOY_KO.md` for private-first deployment.
+See `docs/PRIVACY_KO.md` for the local-processing/privacy note.
 Use `docs/CLOUDFLARE_PRIVATE_CHECKLIST_KO.md` when creating the private Cloudflare Pages app.
 
 ## Safety Model

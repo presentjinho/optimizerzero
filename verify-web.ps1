@@ -21,6 +21,9 @@ Assert-TextContains -Path "web\robots.txt" -Needle "Disallow: /"
 Assert-TextContains -Path "web\_headers" -Needle "X-Robots-Tag: noindex"
 Assert-TextContains -Path "web\index.html" -Needle "./vendor/jszip.min.js"
 Assert-TextContains -Path "web\service-worker.js" -Needle "./vendor/jszip.min.js"
+Assert-TextContains -Path "web\service-worker.js" -Needle "./PRIVACY.md"
+Assert-TextContains -Path "web\PRIVACY.md" -Needle "not uploaded"
+Assert-TextContains -Path "web\PRIVACY.md" -Needle "does not include analytics"
 Assert-TextContains -Path "web\service-worker.js" -Needle 'caches.match("./index.html")'
 
 if (-not (Test-Path -LiteralPath "web\vendor\JSZIP_LICENSE.markdown")) {
