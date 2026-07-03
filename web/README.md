@@ -32,3 +32,9 @@ See `PRIVACY.md` for the local-processing/privacy note.
 ## Deploy
 
 Upload this `web/` folder to Netlify, or set Netlify publish directory to `web`.
+
+For a shareable zip of only the static web app, run:
+
+```powershell
+.\package-web.ps1
+```

@@ -36,6 +36,7 @@ Windows shortcut style:
 .\run-safe-scan.cmd "D:\Files" -r
 .\build-windows.ps1
 .\package-release.ps1
+.\package-web.ps1
 .\verify-release.ps1
 .\verify-web.ps1
 .\cleanup.ps1 -DemoOutputs
