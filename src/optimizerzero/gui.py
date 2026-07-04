@@ -32,11 +32,16 @@ class OptimizerZeroApp(tk.Tk):
         tk.Label(header, text="Choose how much size to save and how much quality to trade.", fg="#9fb0c0", bg="#101418").pack(anchor="w")
         actions = tk.Frame(self, bg="#101418")
         actions.pack(fill="x", padx=18, pady=8)
-        ttk.Button(actions, text="Add Files", command=self.add_files).pack(side="left", padx=(0, 8))
-        ttk.Button(actions, text="Add Folder", command=self.add_folder).pack(side="left", padx=(0, 8))
-        ttk.Button(actions, text="Analyze", command=self.analyze).pack(side="left", padx=(0, 8))
-        ttk.Button(actions, text="Clear", command=self.clear).pack(side="left", padx=(0, 8))
-        ttk.Button(actions, text="Save Report", command=self.save_report).pack(side="left", padx=(0, 18))
+        self.add_files_button = ttk.Button(actions, text="Add Files", command=self.add_files)
+        self.add_files_button.pack(side="left", padx=(0, 8))
+        self.add_folder_button = ttk.Button(actions, text="Add Folder", command=self.add_folder)
+        self.add_folder_button.pack(side="left", padx=(0, 8))
+        self.analyze_button = ttk.Button(actions, text="Analyze", command=self.analyze)
+        self.analyze_button.pack(side="left", padx=(0, 8))
+        self.clear_button = ttk.Button(actions, text="Clear", command=self.clear)
+        self.clear_button.pack(side="left", padx=(0, 8))
+        self.report_button = ttk.Button(actions, text="Save Report", command=self.save_report)
+        self.report_button.pack(side="left", padx=(0, 18))
         tk.Label(actions, text="Profile", fg="#d7dee7", bg="#101418").pack(side="left")
         self.profile_var = tk.StringVar(value=Profile.SAFE.value)
         ttk.Combobox(actions, textvariable=self.profile_var, values=[p.value for p in Profile], width=10, state="readonly").pack(side="left", padx=8)
@@ -47,7 +52,8 @@ class OptimizerZeroApp(tk.Tk):
         ttk.Checkbutton(actions, text="Recursive", variable=self.recursive_var).pack(side="left", padx=8)
         self.dry_run_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(actions, text="Dry Run", variable=self.dry_run_var).pack(side="left", padx=8)
-        ttk.Button(actions, text="Run", command=self.run).pack(side="right")
+        self.run_button = ttk.Button(actions, text="Run", command=self.run)
+        self.run_button.pack(side="right")
         limits = tk.Frame(self, bg="#101418")
         limits.pack(fill="x", padx=18, pady=(0, 8))
         self.min_savings_var = self._entry(limits, "Min savings %", "0", 8)
@@ -95,10 +101,18 @@ class OptimizerZeroApp(tk.Tk):
             self.log_line(f"Found {len(self.files)} supported files.")
 
     def clear(self) -> None:
+        if self.worker and self.worker.is_alive():
+            messagebox.showinfo("Running", "Wait for the current optimization to finish before clearing.")
+            return
         self.files = []
         self.results = []
         self.refresh()
         self.summary_var.set("0 files / 0 B saved")
+
+    def set_running(self, running: bool) -> None:
+        state = "disabled" if running else "normal"
+        for button in (self.add_files_button, self.add_folder_button, self.analyze_button, self.clear_button, self.run_button):
+            button.configure(state=state)
 
     def analyze(self) -> None:
         if not self.files:
@@ -137,13 +151,15 @@ class OptimizerZeroApp(tk.Tk):
             image_quality=quality,
             target_size_bytes=target_size,
         )
+        files_snapshot = list(self.files)
         self.results = []
-        self.worker = threading.Thread(target=self._run_worker, args=(options,), daemon=True)
+        self.set_running(True)
+        self.worker = threading.Thread(target=self._run_worker, args=(files_snapshot, options), daemon=True)
         self.worker.start()
         self.after(100, self._pump_events)
 
-    def _run_worker(self, options: OptimizeOptions) -> None:
-        for path in self.files:
+    def _run_worker(self, files: list[Path], options: OptimizeOptions) -> None:
+        for path in files:
             self.events.put(("status", (path, "running", "-")))
             result = optimize_one(path, options)
             self.events.put(("status", (path, result.message, format_bytes(max(0, result.saved_bytes)))))
@@ -172,6 +188,7 @@ class OptimizerZeroApp(tk.Tk):
                 errors = sum(1 for result in self.results if result.status == "error")
                 self.summary_var.set(f"{optimized} optimized / {format_bytes(saved_total)} saved / {errors} errors")
                 self.log_line("Done.")
+                self.set_running(False)
                 return
         self.after(100, self._pump_events)
 
