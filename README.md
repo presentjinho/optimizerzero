@@ -71,6 +71,7 @@ OptimizerZero preserves image file formats in archives. The Web Lite app convert
 - JSZip is included locally, so deployed Web Lite does not depend on an external CDN
 - intent presets choose practical defaults for archive, sharing, messenger, email, and quality-first use
 - ZIP/CBZ/EPUB/Office containers can recompress JPG/JPEG/WEBP entries in the browser when visual loss is allowed
+- damaged or unsupported image entries inside containers are kept original instead of failing the whole job
 - good for small ZIP/CBZ/EPUB/Office containers and standalone images
 - not meant for heavy PDF cleanup or very large folders
 

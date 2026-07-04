@@ -144,6 +144,15 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("imageOptimizableArchiveExts.has(fileExt)", app)
         self.assertIn('const archiveImageExts = new Set(["jpg", "jpeg", "webp"])', app)
 
+    def test_web_keeps_archive_entry_when_image_recompression_fails(self):
+        app = self.read("app.js")
+
+        self.assertIn("try {", app)
+        self.assertIn("optimized = await recompressImage(data, mimeType)", app)
+        self.assertIn("return { blob: data, changed: false, skipped: true }", app)
+        self.assertIn("imageEntriesSkipped", app)
+        self.assertIn("image entries kept original", app)
+
     def test_web_javascript_syntax(self):
         for script in ("app.js", "service-worker.js"):
             with self.subTest(script=script):
