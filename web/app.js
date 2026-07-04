@@ -82,6 +82,10 @@ function extOf(file) {
   return extOfName(file.name);
 }
 
+function fileKey(file) {
+  return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
 function formatBytes(bytes) {
   const units = ["B", "KB", "MB", "GB"];
   let value = Math.max(0, bytes);
@@ -110,11 +114,17 @@ function setFiles(files) {
       incoming.push(file);
     }
   }
-  const known = new Set(state.files.map((file) => `${file.name}:${file.size}:${file.lastModified}`));
+  const known = new Set(state.files.map(fileKey));
   for (const file of incoming) {
-    const key = `${file.name}:${file.size}:${file.lastModified}`;
+    const key = fileKey(file);
     if (!known.has(key)) state.files.push(file);
   }
+  render();
+}
+
+function removeFile(key) {
+  state.files = state.files.filter((file) => fileKey(file) !== key);
+  state.results = state.results.filter((result) => result.key !== key);
   render();
 }
 
@@ -126,10 +136,12 @@ function render() {
   el.totals.textContent = `${state.files.length} files / ${formatBytes(totalSize)}${rejected}`;
   for (const file of state.files) {
     const row = el.rowTemplate.content.firstElementChild.cloneNode(true);
-    row.dataset.name = file.name;
+    const key = fileKey(file);
+    row.dataset.key = key;
     row.querySelector(".file-name").textContent = file.name;
     row.querySelector(".file-meta").textContent = `${extOf(file).toUpperCase()} / ${formatBytes(file.size)}`;
     row.querySelector(".file-status").textContent = "ready";
+    row.querySelector(".remove-button").addEventListener("click", () => removeFile(key));
     el.fileList.append(row);
   }
   for (const item of state.rejected) {
@@ -138,6 +150,7 @@ function render() {
     row.querySelector(".file-meta").textContent = "not queued";
     row.querySelector(".file-status").textContent = item.reason;
     row.querySelector(".file-status").className = "file-status error";
+    row.querySelector(".remove-button").hidden = true;
     el.fileList.append(row);
   }
 }
@@ -157,7 +170,7 @@ function applyIntent() {
 }
 
 function updateRow(file, status, className = "") {
-  const row = [...document.querySelectorAll(".file-row")].find((item) => item.dataset.name === file.name);
+  const row = [...document.querySelectorAll(".file-row")].find((item) => item.dataset.key === fileKey(file));
   if (!row) return;
   const statusEl = row.querySelector(".file-status");
   statusEl.textContent = status;
@@ -165,7 +178,7 @@ function updateRow(file, status, className = "") {
 }
 
 function attachDownload(file, blob, name) {
-  const row = [...document.querySelectorAll(".file-row")].find((item) => item.dataset.name === file.name);
+  const row = [...document.querySelectorAll(".file-row")].find((item) => item.dataset.key === fileKey(file));
   if (!row) return;
   const button = row.querySelector(".download-button");
   const url = URL.createObjectURL(blob);
@@ -336,6 +349,7 @@ async function run() {
     try {
       const result = await optimizeFile(file);
       const record = {
+        key: fileKey(file),
         name: file.name,
         status: result.status,
         originalSize: file.size,

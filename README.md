@@ -70,6 +70,7 @@ OptimizerZero preserves image file formats in archives. The Web Lite app convert
 - PWA cache lets visitors reopen the app after the first visit
 - JSZip is included locally, so deployed Web Lite does not depend on an external CDN
 - intent presets choose practical defaults for archive, sharing, messenger, email, and quality-first use
+- queue rows can be removed one by one before rerunning
 - ZIP/CBZ/EPUB/Office containers can recompress JPG/JPEG/WEBP entries in the browser when visual loss is allowed
 - damaged or unsupported image entries inside containers are kept original instead of failing the whole job
 - good for small ZIP/CBZ/EPUB/Office containers and standalone images

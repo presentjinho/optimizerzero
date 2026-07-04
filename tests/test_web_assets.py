@@ -53,6 +53,18 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("minSavings", parser.ids)
         self.assertLessEqual(referenced_ids, parser.ids)
 
+    def test_web_rows_can_be_removed_individually(self):
+        html = self.read("index.html")
+        app = self.read("app.js")
+        css = self.read("styles.css")
+
+        self.assertIn('class="remove-button"', html)
+        self.assertIn("function fileKey(file)", app)
+        self.assertIn("function removeFile(key)", app)
+        self.assertIn('row.dataset.key = key', app)
+        self.assertIn('row.querySelector(".remove-button").addEventListener("click", () => removeFile(key))', app)
+        self.assertIn(".remove-button", css)
+
     def test_intent_options_have_korean_recommendations(self):
         parser = IdParser()
         parser.feed(self.read("index.html"))
