@@ -61,8 +61,13 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn('class="remove-button"', html)
         self.assertIn("function fileKey(file)", app)
         self.assertIn("function removeFile(key)", app)
+        self.assertIn("function resultForKey(key)", app)
+        self.assertIn("function configureDownloadButton(button, blob, name)", app)
         self.assertIn('row.dataset.key = key', app)
         self.assertIn('row.querySelector(".remove-button").addEventListener("click", () => removeFile(key))', app)
+        self.assertIn("const result = resultForKey(key)", app)
+        self.assertIn("if (result.blob) configureDownloadButton", app)
+        self.assertIn('state.results = state.results.filter((result) => result.key !== key)', app)
         self.assertIn(".remove-button", css)
 
     def test_intent_options_have_korean_recommendations(self):

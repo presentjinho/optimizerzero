@@ -128,6 +128,32 @@ function removeFile(key) {
   render();
 }
 
+function resultForKey(key) {
+  return state.results.find((result) => result.key === key);
+}
+
+function resultLabel(result) {
+  if (result.status === "optimized") return `saved ${formatBytes(result.savedBytes)}`;
+  return result.message || result.status;
+}
+
+function resultClass(result) {
+  if (result.status === "optimized") return "done";
+  if (result.status === "error") return "error";
+  return "";
+}
+
+function configureDownloadButton(button, blob, name) {
+  const url = URL.createObjectURL(blob);
+  button.hidden = false;
+  button.onclick = () => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+  };
+}
+
 function render() {
   el.fileList.innerHTML = "";
   el.emptyState.hidden = state.files.length > 0;
@@ -142,6 +168,13 @@ function render() {
     row.querySelector(".file-meta").textContent = `${extOf(file).toUpperCase()} / ${formatBytes(file.size)}`;
     row.querySelector(".file-status").textContent = "ready";
     row.querySelector(".remove-button").addEventListener("click", () => removeFile(key));
+    const result = resultForKey(key);
+    if (result) {
+      const statusEl = row.querySelector(".file-status");
+      statusEl.textContent = resultLabel(result);
+      statusEl.className = `file-status ${resultClass(result)}`;
+      if (result.blob) configureDownloadButton(row.querySelector(".download-button"), result.blob, result.outName || result.name);
+    }
     el.fileList.append(row);
   }
   for (const item of state.rejected) {
@@ -181,14 +214,7 @@ function attachDownload(file, blob, name) {
   const row = [...document.querySelectorAll(".file-row")].find((item) => item.dataset.key === fileKey(file));
   if (!row) return;
   const button = row.querySelector(".download-button");
-  const url = URL.createObjectURL(blob);
-  button.hidden = false;
-  button.onclick = () => {
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = name;
-    a.click();
-  };
+  configureDownloadButton(button, blob, name);
 }
 
 function optimizedResults() {
@@ -364,7 +390,7 @@ async function run() {
       const label = result.status === "optimized" ? `saved ${formatBytes(result.saved)}` : result.message;
       updateRow(file, label, result.status === "optimized" ? "done" : "");
     } catch (error) {
-      state.results.push({ name: file.name, status: "error", message: error.message, originalSize: file.size });
+      state.results.push({ key: fileKey(file), name: file.name, status: "error", message: error.message, originalSize: file.size });
       updateRow(file, error.message, "error");
     }
     el.meterFill.style.width = `${Math.round(((index + 1) / state.files.length) * 100)}%`;
