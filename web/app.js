@@ -1,6 +1,7 @@
 const archiveExts = new Set(["zip", "cbz", "epub", "docx", "pptx", "xlsx"]);
 const imageExts = new Set(["png", "jpg", "jpeg", "webp"]);
 const archiveImageExts = new Set(["jpg", "jpeg", "webp"]);
+const imageOptimizableArchiveExts = new Set(["zip", "cbz", "epub", "docx", "pptx", "xlsx"]);
 const state = { files: [], rejected: [], results: [] };
 const el = {
   dropZone: document.querySelector("#dropZone"),
@@ -266,7 +267,7 @@ function safeArchiveName(name) {
 }
 
 function canRecompressArchiveImages(fileExt) {
-  return lossBudget() !== "none" && (fileExt === "zip" || fileExt === "cbz");
+  return lossBudget() !== "none" && imageOptimizableArchiveExts.has(fileExt);
 }
 
 async function maybeOptimizeArchiveEntry(fileExt, cleanName, data) {

@@ -137,6 +137,13 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("image-only / archive engine unavailable", app)
         self.assertIn("Archive engine unavailable. Standalone images still work.", app)
 
+    def test_web_recompresses_images_inside_supported_containers(self):
+        app = self.read("app.js")
+
+        self.assertIn('const imageOptimizableArchiveExts = new Set(["zip", "cbz", "epub", "docx", "pptx", "xlsx"])', app)
+        self.assertIn("imageOptimizableArchiveExts.has(fileExt)", app)
+        self.assertIn('const archiveImageExts = new Set(["jpg", "jpeg", "webp"])', app)
+
     def test_web_javascript_syntax(self):
         for script in ("app.js", "service-worker.js"):
             with self.subTest(script=script):
