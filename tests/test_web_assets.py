@@ -137,6 +137,12 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("Move-Item -LiteralPath $tempWebZipPath -Destination $webZipPath", script)
         self.assertIn("finally", script)
 
+    def test_release_package_reuses_web_package_script(self):
+        script = (ROOT / "package-release.ps1").read_text(encoding="utf-8")
+
+        self.assertIn('"package-web.ps1"', script)
+        self.assertNotIn("Compress-Archive -Path $webFiles.FullName", script)
+
     def test_cloudflare_deploy_workflow_is_manual(self):
         workflow = (ROOT / ".github" / "workflows" / "deploy-cloudflare.yml").read_text(encoding="utf-8")
 

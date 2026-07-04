@@ -26,9 +26,9 @@ $zipName = if ($IncludePdf) { "OptimizerZero-0.1.0-windows-pdf.zip" } else { "Op
 $zipPath = Join-Path $releaseDir $zipName
 Compress-Archive -LiteralPath (Join-Path $PSScriptRoot "dist\OptimizerZero") -DestinationPath $zipPath -Force
 
+& (Join-Path $PSScriptRoot "package-web.ps1")
+
 $webZipPath = Join-Path $releaseDir "OptimizerZero-0.1.0-web-lite.zip"
-$webFiles = Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot "web") -Force
-Compress-Archive -Path $webFiles.FullName -DestinationPath $webZipPath -Force
 & (Join-Path $PSScriptRoot "verify-release.ps1") -ReleaseZip $zipPath -WebZip $webZipPath
 
 Write-Host "Packaged: $zipPath"
