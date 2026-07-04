@@ -7,7 +7,7 @@ It is user-centered: choose how much space to save, how much visual quality to t
 - ZIP, CBZ, EPUB, DOCX, PPTX, XLSX: safe container recompression
 - PDF: lossless cleanup with PyMuPDF when available
 - JPG, JPEG, PNG, WEBP, BMP, TIFF: optional image recompression
-- Image archives: format-preserving image optimization when useful
+- ZIP/CBZ/EPUB/Office containers: format-preserving image entry optimization when useful
 - Analyze folders by type, size, and optional validity
 - Find byte-identical duplicate files before optimizing
 - Batch limits for huge files, minimum saving percentage, target size, quality, and loss budget

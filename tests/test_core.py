@@ -97,6 +97,40 @@ class CoreTests(unittest.TestCase):
                 with zipfile.ZipFile(result.output) as archive:
                     self.assertIn("notes.txt", archive.namelist())
 
+    def test_office_container_image_entries_can_be_optimized(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "deck.docx"
+            image = make_jpeg_bytes((900, 900))
+            with zipfile.ZipFile(source, "w", compression=zipfile.ZIP_STORED) as archive:
+                archive.writestr("[Content_Types].xml", "<Types/>")
+                archive.writestr("word/document.xml", "<document/>")
+                archive.writestr("word/media/photo.jpg", image)
+
+            result = optimize_one(source, OptimizeOptions(loss_budget=LossBudget.HIGH, image_quality=45))
+
+            self.assertEqual(result.status, "optimized")
+            with zipfile.ZipFile(result.output) as archive:
+                self.assertLess(len(archive.read("word/media/photo.jpg")), len(image))
+                self.assertEqual(set(archive.namelist()), {"[Content_Types].xml", "word/document.xml", "word/media/photo.jpg"})
+
+    def test_bad_office_container_image_entry_is_kept_original(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "sheet.xlsx"
+            bad_image = b"not an image"
+            with zipfile.ZipFile(source, "w", compression=zipfile.ZIP_STORED) as archive:
+                archive.writestr("[Content_Types].xml", "<Types/>")
+                archive.writestr("xl/workbook.xml", "<workbook/>")
+                archive.writestr("xl/media/image1.jpg", bad_image)
+                archive.writestr("xl/sharedStrings.xml", "hello" * 1000)
+
+            result = optimize_one(source, OptimizeOptions(loss_budget=LossBudget.HIGH, image_quality=45))
+
+            self.assertEqual(result.status, "optimized")
+            with zipfile.ZipFile(result.output) as archive:
+                self.assertEqual(archive.read("xl/media/image1.jpg"), bad_image)
+
     def test_discover_files(self):
         with tempfile.TemporaryDirectory() as raw:
             tmp_path = Path(raw)

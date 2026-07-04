@@ -23,6 +23,7 @@ IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 PDF_EXTS = {".pdf"}
 SUPPORTED_EXTS = ARCHIVE_EXTS | IMAGE_EXTS | PDF_EXTS
 IMAGE_ARCHIVE_EXTS = {".zip", ".cbz"}
+IMAGE_OPTIMIZABLE_CONTAINER_EXTS = ARCHIVE_EXTS
 OFFICE_EXTS = {".docx", ".pptx", ".xlsx"}
 DEFAULT_IGNORE_DIRS = {".git", ".hg", ".svn", ".venv", "__pycache__", "build", "dist", "node_modules", "releases"}
 
@@ -365,7 +366,7 @@ def optimize_zip_container(source: Path, target: Path, options: OptimizeOptions)
             compress_type = zipfile.ZIP_DEFLATED
             if source.suffix.lower() == ".epub" and name == "mimetype":
                 compress_type = zipfile.ZIP_STORED
-            if source.suffix.lower() in IMAGE_ARCHIVE_EXTS and Path(name).suffix.lower() in IMAGE_EXTS:
+            if source.suffix.lower() in IMAGE_OPTIMIZABLE_CONTAINER_EXTS and Path(name).suffix.lower() in IMAGE_EXTS:
                 optimized = optimize_image_bytes(data, options)
                 if optimized is not None:
                     data = optimized
