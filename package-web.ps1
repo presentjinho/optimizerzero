@@ -9,34 +9,43 @@ $releaseDir = Join-Path $PSScriptRoot "releases"
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 
 $webZipPath = Join-Path $releaseDir "OptimizerZero-$Version-web-lite.zip"
-if (Test-Path -LiteralPath $webZipPath) {
-  Remove-Item -LiteralPath $webZipPath -Force
-}
+$tempWebZipPath = Join-Path $releaseDir ("OptimizerZero-$Version-web-lite.tmp-{0}.zip" -f ([guid]::NewGuid().ToString("N")))
 
 & (Join-Path $PSScriptRoot "verify-web.ps1")
 
-$webFiles = Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot "web") -Force
-Compress-Archive -Path $webFiles.FullName -DestinationPath $webZipPath -Force
+try {
+  $webFiles = Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot "web") -Force
+  Compress-Archive -Path $webFiles.FullName -DestinationPath $tempWebZipPath -Force
 
-$requiredWebEntries = @(
-  "index.html",
-  "app.js",
-  "PRIVACY.md",
-  "styles.css",
-  "service-worker.js",
-  "manifest.webmanifest",
-  "icon.svg",
-  "robots.txt",
-  "_headers",
-  "vendor/jszip.min.js",
-  "vendor/JSZIP_LICENSE.markdown"
-)
-$entries = (tar -tf $webZipPath) | ForEach-Object { $_.TrimStart("./") }
-foreach ($entry in $requiredWebEntries) {
-  if ($entries -notcontains $entry) {
-    throw "Web package missing: $entry"
+  $requiredWebEntries = @(
+    "index.html",
+    "app.js",
+    "PRIVACY.md",
+    "styles.css",
+    "service-worker.js",
+    "manifest.webmanifest",
+    "icon.svg",
+    "robots.txt",
+    "_headers",
+    "vendor/jszip.min.js",
+    "vendor/JSZIP_LICENSE.markdown"
+  )
+  $entries = (tar -tf $tempWebZipPath) | ForEach-Object { $_.TrimStart("./") }
+  foreach ($entry in $requiredWebEntries) {
+    if ($entries -notcontains $entry) {
+      throw "Web package missing: $entry"
+    }
+  }
+  if (Test-Path -LiteralPath $webZipPath) {
+    Remove-Item -LiteralPath $webZipPath -Force
+  }
+  Move-Item -LiteralPath $tempWebZipPath -Destination $webZipPath
+} finally {
+  if (Test-Path -LiteralPath $tempWebZipPath) {
+    Remove-Item -LiteralPath $tempWebZipPath -Force -ErrorAction SilentlyContinue
   }
 }
+
 $webHash = Get-FileHash -Algorithm SHA256 -LiteralPath $webZipPath
 "$($webHash.Hash)  $(Split-Path -Leaf $webZipPath)" | Set-Content -LiteralPath "$webZipPath.sha256" -Encoding ASCII
 

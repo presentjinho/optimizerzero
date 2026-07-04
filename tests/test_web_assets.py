@@ -128,6 +128,15 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("--project-name", script)
         self.assertIn("optimizerzero", script)
 
+    def test_web_package_uses_temporary_zip_before_replace(self):
+        script = (ROOT / "package-web.ps1").read_text(encoding="utf-8")
+
+        self.assertIn("$tempWebZipPath", script)
+        self.assertIn("Compress-Archive -Path $webFiles.FullName -DestinationPath $tempWebZipPath", script)
+        self.assertIn("tar -tf $tempWebZipPath", script)
+        self.assertIn("Move-Item -LiteralPath $tempWebZipPath -Destination $webZipPath", script)
+        self.assertIn("finally", script)
+
     def test_cloudflare_deploy_workflow_is_manual(self):
         workflow = (ROOT / ".github" / "workflows" / "deploy-cloudflare.yml").read_text(encoding="utf-8")
 
