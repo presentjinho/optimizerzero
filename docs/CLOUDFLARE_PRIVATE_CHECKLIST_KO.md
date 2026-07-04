@@ -35,6 +35,7 @@
 - [ ] GitHub repo > Settings > Secrets and variables > Actions
 - [ ] `CLOUDFLARE_API_TOKEN` 추가
 - [ ] `CLOUDFLARE_ACCOUNT_ID` 추가
+- [ ] `docs/GITHUB_SECRETS_CLOUDFLARE_KO.md` 확인
 - [ ] Actions > `Deploy Cloudflare Pages`
 - [ ] Run workflow
 - [ ] branch: `main`

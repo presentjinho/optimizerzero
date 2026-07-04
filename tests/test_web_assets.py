@@ -121,6 +121,14 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("cloudflare/wrangler-action@v3", workflow)
         self.assertIn("pages deploy web --project-name optimizerzero", workflow)
 
+    def test_cloudflare_secrets_docs_exist(self):
+        doc = (ROOT / "docs" / "GITHUB_SECRETS_CLOUDFLARE_KO.md").read_text(encoding="utf-8")
+
+        self.assertIn("CLOUDFLARE_API_TOKEN", doc)
+        self.assertIn("CLOUDFLARE_ACCOUNT_ID", doc)
+        self.assertIn("GitHub repository secret", doc)
+        self.assertIn("token은 README, issue, commit, 채팅에 붙여넣지 않는다", doc)
+
     def test_app_reports_archive_dependency_status(self):
         app = self.read("app.js")
 

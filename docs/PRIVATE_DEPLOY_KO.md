@@ -81,6 +81,7 @@ PC를 켜지 않고 GitHub에서 배포 버튼으로 올리려면 repository sec
 
 그 다음 GitHub Actions에서 `Deploy Cloudflare Pages` workflow를 수동 실행한다.
 이 workflow는 자동 배포가 아니라 `workflow_dispatch` 버튼 실행만 허용한다.
+자세한 secret 설정은 `docs/GITHUB_SECRETS_CLOUDFLARE_KO.md`를 따른다.
 
 ## 공개 전환할 때
 

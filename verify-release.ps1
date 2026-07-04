@@ -6,9 +6,41 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location -LiteralPath $PSScriptRoot
 
+function Get-PythonExe {
+  $knownPaths = @()
+  if ($env:USERPROFILE) {
+    $knownPaths += Join-Path $env:USERPROFILE "AppData\Local\Programs\Python\Python312\python.exe"
+    $knownPaths += Join-Path $env:USERPROFILE "AppData\Local\Programs\Python\Python311\python.exe"
+    $knownPaths += Join-Path $env:USERPROFILE "AppData\Local\Programs\Python\Python310\python.exe"
+  }
+  foreach ($path in $knownPaths) {
+    if (Test-Path -LiteralPath $path) {
+      return $path
+    }
+  }
+  $python = Get-Command python -ErrorAction SilentlyContinue
+  if ($python -and $python.Source -and (Split-Path $python.Source -Parent) -and (Test-Path -LiteralPath $python.Source) -and ($python.Source -notlike "*\WindowsApps\*")) {
+    return $python.Source
+  }
+  $launcher = Get-Command py -ErrorAction SilentlyContinue
+  if ($launcher -and $launcher.Source -and (Split-Path $launcher.Source -Parent) -and (Test-Path -LiteralPath $launcher.Source)) {
+    return $launcher.Source
+  }
+  $candidates = @()
+  if ($env:LOCALAPPDATA) {
+    $candidates += Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA "Programs\Python") -Filter python.exe -Recurse -ErrorAction SilentlyContinue
+  }
+  $candidate = $candidates | Sort-Object FullName -Descending | Select-Object -First 1
+  if ($candidate -and $candidate.FullName -and (Split-Path $candidate.FullName -Parent) -and ($candidate.FullName -notlike "*\WindowsApps\*")) {
+    return $candidate.FullName
+  }
+  throw "Python was not found. Install Python 3.10+ or add python.exe to PATH."
+}
+
+$PythonExe = Get-PythonExe
 $env:PYTHONPATH = Join-Path $PSScriptRoot "src"
-python -m compileall src gui_entry.py
-python -m unittest discover -s tests -v
+& $PythonExe -m compileall src gui_entry.py
+& $PythonExe -m unittest discover -s tests -v
 & (Join-Path $PSScriptRoot "verify-web.ps1")
 
 if (Test-Path -LiteralPath $ReleaseZip) {
