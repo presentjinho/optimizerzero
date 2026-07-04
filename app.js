@@ -276,7 +276,12 @@ async function maybeOptimizeArchiveEntry(fileExt, cleanName, data) {
     return { blob: data, changed: false };
   }
   const mimeType = imageMimeForExt(entryExt);
-  const optimized = await recompressImage(data, mimeType);
+  let optimized;
+  try {
+    optimized = await recompressImage(data, mimeType);
+  } catch {
+    return { blob: data, changed: false, skipped: true };
+  }
   if (!optimized || optimized.size >= data.size) return { blob: data, changed: false };
   return { blob: optimized, changed: true };
 }
@@ -287,12 +292,14 @@ async function optimizeArchive(file) {
   const source = await JSZip.loadAsync(file);
   const output = new JSZip();
   let imageEntriesOptimized = 0;
+  let imageEntriesSkipped = 0;
   for (const [name, entry] of Object.entries(source.files)) {
     if (entry.dir) continue;
     const cleanName = safeArchiveName(name);
     const data = await entry.async("blob");
     const entryResult = await maybeOptimizeArchiveEntry(fileExt, cleanName, data);
     imageEntriesOptimized += entryResult.changed ? 1 : 0;
+    imageEntriesSkipped += entryResult.skipped ? 1 : 0;
     const compression = fileExt === "epub" && cleanName === "mimetype" ? "STORE" : "DEFLATE";
     output.file(cleanName, entryResult.blob, { compression });
   }
@@ -305,7 +312,9 @@ async function optimizeArchive(file) {
   const accepted = outputAccepted(file.size, blob.size);
   if (!accepted.ok) return { status: "skipped", message: accepted.message };
   const outName = file.name.replace(/(\.[^.]+)$/, ".ozero$1");
-  const detail = imageEntriesOptimized ? `container + ${imageEntriesOptimized} image entries` : "container recompressed";
+  const detailParts = imageEntriesOptimized ? [`container + ${imageEntriesOptimized} image entries`] : ["container recompressed"];
+  if (imageEntriesSkipped) detailParts.push(`${imageEntriesSkipped} image entries kept original`);
+  const detail = detailParts.join(" / ");
   return { status: "optimized", blob, outName, saved: accepted.saved, message: detail };
 }
 
