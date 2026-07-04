@@ -143,6 +143,15 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn('"package-web.ps1"', script)
         self.assertNotIn("Compress-Archive -Path $webFiles.FullName", script)
 
+    def test_release_verify_writes_artifact_manifest(self):
+        script = (ROOT / "verify-release.ps1").read_text(encoding="utf-8")
+
+        self.assertIn("OptimizerZero-release-manifest.json", script)
+        self.assertIn("Add-ManifestItem", script)
+        self.assertIn('-Role "web-lite"', script)
+        self.assertIn('-Role "windows-app"', script)
+        self.assertIn("sha256 = $Sha256", script)
+
     def test_cloudflare_deploy_workflow_is_manual(self):
         workflow = (ROOT / ".github" / "workflows" / "deploy-cloudflare.yml").read_text(encoding="utf-8")
 

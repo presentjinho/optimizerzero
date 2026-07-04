@@ -43,6 +43,8 @@ Windows shortcut style:
 .\cleanup.ps1 -DemoOutputs
 ```
 
+`verify-release.ps1` writes `releases/OptimizerZero-release-manifest.json` with artifact names, roles, sizes, and SHA256 hashes for sharing checks.
+
 ## User-Controlled Compression
 
 - `--loss-budget none`: do not use lossy image recompression.

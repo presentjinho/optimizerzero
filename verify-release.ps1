@@ -43,9 +43,28 @@ $env:PYTHONPATH = Join-Path $PSScriptRoot "src"
 & $PythonExe -m unittest discover -s tests -v
 & (Join-Path $PSScriptRoot "verify-web.ps1")
 
+$manifestItems = @()
+
+function Add-ManifestItem {
+  param(
+    [string]$Path,
+    [string]$Role,
+    [string]$Sha256
+  )
+  $item = Get-Item -LiteralPath $Path
+  $script:manifestItems += [pscustomobject]@{
+    name = $item.Name
+    path = $Path
+    role = $Role
+    bytes = $item.Length
+    sha256 = $Sha256
+  }
+}
+
 if (Test-Path -LiteralPath $ReleaseZip) {
   $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $ReleaseZip
   "$($hash.Hash)  $(Split-Path -Leaf $ReleaseZip)" | Set-Content -LiteralPath "$ReleaseZip.sha256" -Encoding ASCII
+  Add-ManifestItem -Path $ReleaseZip -Role "windows-app" -Sha256 $hash.Hash
   Write-Host "Release verified: $ReleaseZip"
   Write-Host "SHA256: $($hash.Hash)"
 }
@@ -75,6 +94,18 @@ if (Test-Path -LiteralPath $WebZip) {
   }
   $webHash = Get-FileHash -Algorithm SHA256 -LiteralPath $WebZip
   "$($webHash.Hash)  $(Split-Path -Leaf $WebZip)" | Set-Content -LiteralPath "$WebZip.sha256" -Encoding ASCII
+  Add-ManifestItem -Path $WebZip -Role "web-lite" -Sha256 $webHash.Hash
   Write-Host "Web release verified: $WebZip"
   Write-Host "Web SHA256: $($webHash.Hash)"
+}
+
+if ($manifestItems.Count -gt 0) {
+  $manifestPath = Join-Path $PSScriptRoot "releases\OptimizerZero-release-manifest.json"
+  $manifest = [pscustomobject]@{
+    generated_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    app = "OptimizerZero"
+    artifacts = $manifestItems
+  }
+  $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+  Write-Host "Manifest: $manifestPath"
 }
