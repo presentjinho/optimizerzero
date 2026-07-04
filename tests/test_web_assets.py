@@ -151,6 +151,9 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn('-Role "web-lite"', script)
         self.assertIn('-Role "windows-app"', script)
         self.assertIn("sha256 = $Sha256", script)
+        self.assertIn("function Test-Manifest", script)
+        self.assertIn("Manifest SHA256 mismatch", script)
+        self.assertIn("Test-Manifest -ManifestPath $manifestPath", script)
 
     def test_cloudflare_deploy_workflow_is_manual(self):
         workflow = (ROOT / ".github" / "workflows" / "deploy-cloudflare.yml").read_text(encoding="utf-8")

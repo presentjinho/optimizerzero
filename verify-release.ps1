@@ -61,6 +61,24 @@ function Add-ManifestItem {
   }
 }
 
+function Test-Manifest {
+  param([string]$ManifestPath)
+  $manifest = Get-Content -Raw -LiteralPath $ManifestPath | ConvertFrom-Json
+  foreach ($artifact in $manifest.artifacts) {
+    if (-not (Test-Path -LiteralPath $artifact.path)) {
+      throw "Manifest artifact missing: $($artifact.path)"
+    }
+    $item = Get-Item -LiteralPath $artifact.path
+    if ($item.Length -ne $artifact.bytes) {
+      throw "Manifest size mismatch: $($artifact.name)"
+    }
+    $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $artifact.path
+    if ($hash.Hash -ne $artifact.sha256) {
+      throw "Manifest SHA256 mismatch: $($artifact.name)"
+    }
+  }
+}
+
 if (Test-Path -LiteralPath $ReleaseZip) {
   $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $ReleaseZip
   "$($hash.Hash)  $(Split-Path -Leaf $ReleaseZip)" | Set-Content -LiteralPath "$ReleaseZip.sha256" -Encoding ASCII
@@ -107,5 +125,6 @@ if ($manifestItems.Count -gt 0) {
     artifacts = $manifestItems
   }
   $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+  Test-Manifest -ManifestPath $manifestPath
   Write-Host "Manifest: $manifestPath"
 }
