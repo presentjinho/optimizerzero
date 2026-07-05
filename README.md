@@ -4,10 +4,11 @@ OptimizerZero is a safety-first compression and archive optimizer for local file
 
 It is user-centered: start with one practical goal, then tune limits only when needed.
 
-- ZIP, CBZ, EPUB, DOCX, PPTX, XLSX: safe container recompression
-- PDF: lossless cleanup with PyMuPDF when available
+- ZIP, CBZ, EPUB, DOCX, PPTX, XLSX, ODT, ODS, ODP, JAR: safe container recompression
+- TAR, TGZ, TAR.GZ, TAR.BZ2, TAR.XZ: safe archive recompression
+- PDF: lossless cleanup with PyMuPDF and pikepdf when available
 - JPG, JPEG, PNG, WEBP, BMP, TIFF: optional image recompression
-- ZIP/CBZ/EPUB/Office containers: format-preserving image entry optimization when useful
+- ZIP/CBZ/EPUB/Office/OpenDocument containers: format-preserving image entry optimization when useful
 - Generic files: verified `.ozero.zip` fallback when no format-specific optimizer exists
 - Analyze folders by type, size, and optional validity
 - Find byte-identical duplicate files before optimizing

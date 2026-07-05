@@ -1,5 +1,6 @@
 import io
 import tempfile
+import tarfile
 import unittest
 import zipfile
 from pathlib import Path
@@ -21,6 +22,7 @@ from optimizerzero.core import (
     parse_size,
     planned_output_path,
     validate_epub,
+    validate_file,
 )
 
 
@@ -116,6 +118,36 @@ class CoreTests(unittest.TestCase):
             with zipfile.ZipFile(result.output) as archive:
                 self.assertLess(len(archive.read("word/media/photo.jpg")), len(image))
                 self.assertEqual(set(archive.namelist()), {"[Content_Types].xml", "word/document.xml", "word/media/photo.jpg"})
+
+    def test_open_document_container_is_treated_as_zip_container(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "doc.odt"
+            with zipfile.ZipFile(source, "w", compression=zipfile.ZIP_STORED) as archive:
+                archive.writestr("mimetype", "application/vnd.oasis.opendocument.text")
+                archive.writestr("content.xml", "<doc>" + ("hello" * 1000) + "</doc>")
+
+            result = optimize_one(source, OptimizeOptions())
+
+            self.assertEqual(result.status, "optimized")
+            with zipfile.ZipFile(result.output) as archive:
+                self.assertEqual(set(archive.namelist()), {"mimetype", "content.xml"})
+
+    def test_tar_container_compresses_to_tar_gz_and_verifies(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "bundle.tar"
+            data = tmp_path / "notes.txt"
+            data.write_text("hello\n" * 1000, encoding="utf-8")
+            with tarfile.open(source, "w") as archive:
+                archive.add(data, arcname="notes.txt")
+
+            result = optimize_one(source, OptimizeOptions())
+
+            self.assertEqual(result.status, "optimized")
+            self.assertTrue(result.output.endswith(".ozero.tar.gz"))
+            with tarfile.open(result.output, "r:*") as archive:
+                self.assertEqual([member.name for member in archive.getmembers() if member.isfile()], ["notes.txt"])
 
     def test_bad_office_container_image_entry_is_kept_original(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -271,6 +303,27 @@ class CoreTests(unittest.TestCase):
 
             self.assertEqual(result.status, "optimized")
             self.assertLess(result.output_size, result.original_size)
+
+    def test_pdf_optimizer_uses_available_pdf_engines(self):
+        try:
+            import fitz
+        except Exception:
+            self.skipTest("PyMuPDF is not installed")
+
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "sample.pdf"
+            document = fitz.open()
+            page = document.new_page()
+            page.insert_text((72, 72), "OptimizerZero PDF test")
+            document.save(str(source))
+            document.close()
+
+            result = optimize_one(source, OptimizeOptions(allow_larger=True))
+
+            self.assertEqual(result.status, "optimized")
+            ok, message = validate_file(Path(result.output))
+            self.assertTrue(ok, message)
 
 
 if __name__ == "__main__":

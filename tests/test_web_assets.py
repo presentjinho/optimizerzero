@@ -158,6 +158,7 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("[switch]$Lite", script)
         self.assertIn("windows-pdf.zip", script)
         self.assertIn("python -m pip install \".[pdf]\"", build)
+        self.assertIn('"pikepdf"', build)
         self.assertIn("windows-pdf.zip", verify)
 
     def test_release_verify_writes_artifact_manifest(self):
@@ -222,7 +223,7 @@ class WebAssetTests(unittest.TestCase):
     def test_web_recompresses_images_inside_supported_containers(self):
         app = self.read("app.js")
 
-        self.assertIn('const imageOptimizableArchiveExts = new Set(["zip", "cbz", "epub", "docx", "pptx", "xlsx"])', app)
+        self.assertIn('const imageOptimizableArchiveExts = new Set(["zip", "cbz", "epub", "docx", "pptx", "xlsx", "odt", "ods", "odp", "jar"])', app)
         self.assertIn("imageOptimizableArchiveExts.has(fileExt)", app)
         self.assertIn('const archiveImageExts = new Set(["jpg", "jpeg", "webp"])', app)
 

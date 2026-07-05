@@ -15,6 +15,7 @@ if (-not $Lite) {
 $hiddenImports = @("PIL._tkinter_finder")
 if (-not $Lite) {
   $hiddenImports += "fitz"
+  $hiddenImports += "pikepdf"
 }
 
 $args = @(

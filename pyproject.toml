@@ -12,7 +12,7 @@ authors = [{ name = "OptimizerZero" }]
 dependencies = ["Pillow>=10"]
 
 [project.optional-dependencies]
-pdf = ["PyMuPDF>=1.23"]
+pdf = ["PyMuPDF>=1.23", "pikepdf>=10.9"]
 build = ["pyinstaller>=6.0"]
 
 [project.scripts]

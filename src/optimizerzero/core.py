@@ -5,6 +5,7 @@ import io
 import json
 import os
 import shutil
+import tarfile
 import tempfile
 import time
 import zipfile
@@ -19,13 +20,15 @@ from PIL import Image, ImageFile, ImageOps
 Image.MAX_IMAGE_PIXELS = 160_000_000
 ImageFile.LOAD_TRUNCATED_IMAGES = False
 
-ARCHIVE_EXTS = {".zip", ".cbz", ".epub", ".docx", ".pptx", ".xlsx"}
+ZIP_CONTAINER_EXTS = {".zip", ".cbz", ".epub", ".docx", ".pptx", ".xlsx", ".odt", ".ods", ".odp", ".jar"}
+TAR_EXTS = {".tar", ".tgz", ".tar.gz", ".tbz2", ".tar.bz2", ".txz", ".tar.xz"}
+ARCHIVE_EXTS = ZIP_CONTAINER_EXTS | TAR_EXTS
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 PDF_EXTS = {".pdf"}
 SUPPORTED_EXTS = ARCHIVE_EXTS | IMAGE_EXTS | PDF_EXTS
 IMAGE_ARCHIVE_EXTS = {".zip", ".cbz"}
-IMAGE_OPTIMIZABLE_CONTAINER_EXTS = ARCHIVE_EXTS
-OFFICE_EXTS = {".docx", ".pptx", ".xlsx"}
+IMAGE_OPTIMIZABLE_CONTAINER_EXTS = ZIP_CONTAINER_EXTS
+OFFICE_EXTS = {".docx", ".pptx", ".xlsx", ".odt", ".ods", ".odp"}
 DEFAULT_IGNORE_DIRS = {".git", ".hg", ".svn", ".venv", "__pycache__", "build", "dist", "node_modules", "releases"}
 DEFAULT_IGNORE_SUFFIXES = {".pyc", ".pyo"}
 
@@ -119,6 +122,21 @@ def kind_for_suffix(suffix: str) -> str:
     return "generic"
 
 
+def extension_for_path(path: Path) -> str:
+    name = path.name.lower()
+    for extension in sorted(TAR_EXTS, key=len, reverse=True):
+        if name.endswith(extension):
+            return extension
+    return path.suffix.lower()
+
+
+def output_suffix_for_path(path: Path) -> str:
+    extension = extension_for_path(path)
+    if extension == ".tar":
+        return ".tar.gz"
+    return extension if extension in SUPPORTED_EXTS else ".zip"
+
+
 def options_for_goal(goal: Goal) -> OptimizeOptions:
     if goal == Goal.QUALITY:
         return OptimizeOptions(goal=goal, profile=Profile.SAFE, loss_budget=LossBudget.NONE, min_savings_percent=0.5)
@@ -184,7 +202,7 @@ def quality_ladder(options: OptimizeOptions) -> list[int]:
 def should_consider_file(path: Path, generic_fallback: bool = True) -> bool:
     if any(part in DEFAULT_IGNORE_DIRS for part in path.parts):
         return False
-    suffix = path.suffix.lower()
+    suffix = extension_for_path(path)
     if suffix in DEFAULT_IGNORE_SUFFIXES:
         return False
     if ".ozero" in path.name:
@@ -210,7 +228,7 @@ def discover_files(paths: Iterable[Path], recursive: bool, generic_fallback: boo
 def analyze_files(paths: Iterable[Path], recursive: bool, verify: bool = False, generic_fallback: bool = True) -> list[FileAnalysis]:
     analyses: list[FileAnalysis] = []
     for path in discover_files(paths, recursive=recursive, generic_fallback=generic_fallback):
-        suffix = path.suffix.lower()
+        suffix = extension_for_path(path)
         valid: bool | None = None
         message = ""
         if verify:
@@ -249,7 +267,7 @@ def planned_output_path(source: Path, options: OptimizeOptions) -> Path:
     if options.in_place:
         return source
     parent = options.output_dir if options.output_dir else source.parent
-    output_suffix = source.suffix if source.suffix.lower() in SUPPORTED_EXTS else ".zip"
+    output_suffix = output_suffix_for_path(source)
     base = parent / f"{source.stem}.ozero{output_suffix}"
     if not base.exists():
         return base
@@ -292,6 +310,23 @@ def validate_zip(path: Path, expected_names: set[str] | None = None) -> tuple[bo
     return True, "verified"
 
 
+def validate_tar(path: Path, expected_names: set[str] | None = None) -> tuple[bool, str]:
+    if not tarfile.is_tarfile(path):
+        return False, "not a tar container"
+    try:
+        names: set[str] = set()
+        with tarfile.open(path, "r:*") as archive:
+            for member in archive.getmembers():
+                clean_name = safe_zip_name(member.name)
+                if member.isfile():
+                    names.add(clean_name)
+            if expected_names is not None and names != expected_names:
+                return False, "entry set changed"
+    except Exception as exc:
+        return False, str(exc)
+    return True, "verified"
+
+
 def validate_epub(path: Path) -> tuple[bool, str]:
     ok, message = validate_zip(path)
     if not ok:
@@ -314,11 +349,13 @@ def validate_epub(path: Path) -> tuple[bool, str]:
 
 def validate_file(path: Path) -> tuple[bool, str]:
     path = Path(path)
-    suffix = path.suffix.lower()
+    suffix = extension_for_path(path)
     if suffix == ".epub":
         return validate_epub(path)
-    if suffix in ARCHIVE_EXTS:
+    if suffix in ZIP_CONTAINER_EXTS:
         return validate_zip(path)
+    if suffix in TAR_EXTS:
+        return validate_tar(path)
     if suffix in IMAGE_EXTS:
         try:
             with Image.open(path) as image:
@@ -416,20 +453,85 @@ def optimize_zip_container(source: Path, target: Path, options: OptimizeOptions)
     return validate_zip(target, expected_names)
 
 
+def tar_write_mode(extension: str) -> str:
+    if extension in {".tgz", ".tar.gz"}:
+        return "w:gz"
+    if extension in {".tbz2", ".tar.bz2"}:
+        return "w:bz2"
+    if extension in {".txz", ".tar.xz"}:
+        return "w:xz"
+    return "w"
+
+
+def optimize_tar_container(source: Path, target: Path) -> tuple[bool, str]:
+    expected_names: set[str] = set()
+    extension = extension_for_path(target)
+    with tarfile.open(source, "r:*") as tin, tarfile.open(target, tar_write_mode(extension)) as tout:
+        for member in tin.getmembers():
+            clean_name = safe_zip_name(member.name)
+            member.name = clean_name
+            fileobj = tin.extractfile(member) if member.isfile() else None
+            try:
+                if member.isfile():
+                    expected_names.add(clean_name)
+                tout.addfile(member, fileobj)
+            finally:
+                if fileobj is not None:
+                    fileobj.close()
+    return validate_tar(target, expected_names)
+
+
 def optimize_pdf(source: Path, target: Path) -> tuple[bool, str]:
-    try:
-        import fitz
-    except Exception:
-        return False, "PyMuPDF is not available"
-    try:
-        with fitz.open(str(source)) as document:
-            page_count = document.page_count
-            document.save(str(target), garbage=4, deflate=True, clean=True)
-        with fitz.open(str(target)) as verified:
-            if verified.page_count != page_count:
-                return False, "PDF page count changed"
-    except Exception as exc:
-        return False, str(exc)
+    candidates: list[tuple[Path, str]] = []
+    errors: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="optimizerzero_pdf_") as temp_dir_raw:
+        temp_dir = Path(temp_dir_raw)
+        try:
+            import fitz
+            fitz_candidate = temp_dir / "pymupdf.pdf"
+            with fitz.open(str(source)) as document:
+                page_count = document.page_count
+                document.save(
+                    str(fitz_candidate),
+                    garbage=4,
+                    clean=True,
+                    deflate=True,
+                    deflate_images=True,
+                    deflate_fonts=True,
+                    use_objstms=1,
+                    compression_effort=9,
+                )
+            with fitz.open(str(fitz_candidate)) as verified:
+                if verified.page_count != page_count:
+                    raise ValueError("PDF page count changed")
+            candidates.append((fitz_candidate, "PyMuPDF"))
+        except Exception as exc:
+            errors.append(f"PyMuPDF: {exc}")
+
+        try:
+            import pikepdf
+            pike_candidate = temp_dir / "pikepdf.pdf"
+            with pikepdf.Pdf.open(str(source)) as document:
+                page_count = len(document.pages)
+                document.save(
+                    str(pike_candidate),
+                    compress_streams=True,
+                    object_stream_mode=pikepdf.ObjectStreamMode.generate,
+                    recompress_flate=True,
+                    linearize=False,
+                )
+            with pikepdf.Pdf.open(str(pike_candidate)) as verified:
+                if len(verified.pages) != page_count:
+                    raise ValueError("PDF page count changed")
+            candidates.append((pike_candidate, "pikepdf"))
+        except Exception as exc:
+            errors.append(f"pikepdf: {exc}")
+
+        if not candidates:
+            return False, "; ".join(errors) if errors else "PDF optimizer is not available"
+
+        best, engine = min(candidates, key=lambda item: item[0].stat().st_size)
+        shutil.copy2(best, target)
     return True, "verified"
 
 
@@ -501,7 +603,8 @@ def optimize_one(source: Path, options: OptimizeOptions) -> OptimizeResult:
     original_size = source.stat().st_size if source.exists() else 0
     if not source.exists():
         return OptimizeResult(str(source), "error", "source not found", 0, 0, 0)
-    if source.suffix.lower() not in SUPPORTED_EXTS and not options.generic_fallback:
+    source_ext = extension_for_path(source)
+    if source_ext not in SUPPORTED_EXTS and not options.generic_fallback:
         return OptimizeResult(str(source), "skipped", "unsupported file type", original_size, original_size, 0)
     if options.max_size_bytes is not None and original_size > options.max_size_bytes:
         return OptimizeResult(str(source), "skipped", f"larger than limit: {format_bytes(options.max_size_bytes)}", original_size, original_size, 0)
@@ -509,12 +612,14 @@ def optimize_one(source: Path, options: OptimizeOptions) -> OptimizeResult:
     if options.dry_run:
         return OptimizeResult(str(source), "planned", f"would write {final_output}", original_size, original_size, 0, str(final_output))
     with tempfile.TemporaryDirectory(prefix="optimizerzero_") as temp_dir_raw:
-        candidate_suffix = source.suffix.lower() if source.suffix.lower() in SUPPORTED_EXTS else ".zip"
+        candidate_suffix = output_suffix_for_path(source)
         candidate = Path(temp_dir_raw) / f"candidate{candidate_suffix}"
-        suffix = source.suffix.lower()
+        suffix = source_ext
         try:
-            if suffix in ARCHIVE_EXTS:
+            if suffix in ZIP_CONTAINER_EXTS:
                 ok, message = optimize_zip_container(source, candidate, options)
+            elif suffix in TAR_EXTS:
+                ok, message = optimize_tar_container(source, candidate)
             elif suffix in PDF_EXTS:
                 ok, message = optimize_pdf(source, candidate)
             elif suffix in IMAGE_EXTS:

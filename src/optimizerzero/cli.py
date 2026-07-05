@@ -87,6 +87,7 @@ def main(argv: list[str] | None = None) -> int:
         checks = {
             "Pillow": importlib.util.find_spec("PIL") is not None,
             "PyMuPDF/PDF cleanup": importlib.util.find_spec("fitz") is not None,
+            "pikepdf/PDF repair": importlib.util.find_spec("pikepdf") is not None,
             "tkinter/GUI": importlib.util.find_spec("tkinter") is not None,
             "PyInstaller/build": importlib.util.find_spec("PyInstaller") is not None,
         }

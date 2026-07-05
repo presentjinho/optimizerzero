@@ -2,7 +2,7 @@ OptimizerZero v0.1.0
 
 What this is
 - A local, safety-first compression optimizer.
-- Works on ZIP, CBZ, EPUB, DOCX, PPTX, XLSX, PDFs, images, and generic files.
+- Works on ZIP, CBZ, EPUB, DOCX, PPTX, XLSX, ODT, ODS, ODP, JAR, TAR/TGZ, PDFs, images, and generic files.
 - Preserves originals by default.
 - Keeps output only when it verifies and is smaller.
 
@@ -16,7 +16,7 @@ How to run
 7. Use Workers "auto" to let the PC process multiple files at once.
 
 Safety notes
-- The default Windows build bundles PDF cleanup support.
+- The default Windows build bundles PyMuPDF and pikepdf PDF cleanup support.
 - The lite Windows build excludes PDF cleanup support.
 - Loss none keeps images visually unchanged.
 - Higher loss budgets should be checked before replacing originals.

@@ -4,7 +4,7 @@
 
 OptimizerZero is a local-first compression assistant.
 
-- broader input scope: archives, document containers, PDFs, images, generic files
+- broader input scope: archives, document containers, OpenDocument/JAR, TAR/TGZ, PDFs, images, generic files
 - safety-first defaults: preserve originals, verify outputs, skip larger results
 - practical preflight: analyze folders, find duplicates, cap huge files before processing
 - user-controlled compression: simple goals first, advanced target size and minimum savings when needed
@@ -14,8 +14,9 @@ OptimizerZero is a local-first compression assistant.
 
 - ZIP/CBZ: recompress entries; image entries keep their original format
 - EPUB: preserve `mimetype` as first stored entry; validate required EPUB structure
-- DOCX/PPTX/XLSX: ZIP container recompression only
-- PDF: PyMuPDF lossless cleanup, deflate, garbage collection, page-count verification
+- DOCX/PPTX/XLSX/ODT/ODS/ODP/JAR: ZIP container recompression
+- TAR/TGZ/TAR.GZ/TAR.BZ2/TAR.XZ: TAR container recompression with path-safety validation
+- PDF: PyMuPDF + pikepdf lossless cleanup, deflate, object streams, page-count verification
 - Images: PNG lossless optimization; JPEG/WEBP quality control when lossy compression is allowed
 - Generic files: fallback to verified `.ozero.zip` when no format-specific optimizer exists
 - Multi-file jobs: use local CPU workers for parallel desktop processing
@@ -36,7 +37,7 @@ Implemented for v0.1.0:
 - synthetic public demo assets
 - release zip SHA256 generation
 - release verification script
-- PDF support in the default Windows build, with a lite build option
+- PyMuPDF and pikepdf PDF support in the default Windows build, with a lite build option
 - output-name collision avoidance
 - Netlify-ready Web Lite app
 - PWA cache and installable Web Lite shell
