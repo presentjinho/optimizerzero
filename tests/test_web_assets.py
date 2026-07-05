@@ -176,6 +176,15 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("cloudflare/wrangler-action@v3", workflow)
         self.assertIn("pages deploy web --project-name optimizerzero", workflow)
 
+    def test_ci_workflow_is_manual_to_avoid_failure_mail_noise(self):
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("push:", workflow)
+        self.assertNotIn("pull_request:", workflow)
+        self.assertIn("python -m unittest discover -s tests -v", workflow)
+        self.assertIn(".\\verify-web.ps1", workflow)
+
     def test_cloudflare_secrets_docs_exist(self):
         doc = (ROOT / "docs" / "GITHUB_SECRETS_CLOUDFLARE_KO.md").read_text(encoding="utf-8")
 
