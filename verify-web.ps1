@@ -33,6 +33,7 @@ function Get-PythonExe {
 }
 
 $PythonExe = Get-PythonExe
+$env:PYTHONPATH = Join-Path $PSScriptRoot "src"
 
 node --check web\app.js
 node --check web\service-worker.js

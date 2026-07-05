@@ -364,17 +364,30 @@ def validate_file(path: Path) -> tuple[bool, str]:
         except Exception as exc:
             return False, str(exc)
     if suffix in PDF_EXTS:
+        errors: list[str] = []
         try:
             import fitz
+            try:
+                with fitz.open(str(path)) as document:
+                    if document.page_count <= 0:
+                        return False, "PDF has no pages"
+                return True, "verified"
+            except Exception as exc:
+                errors.append(f"PyMuPDF: {exc}")
         except Exception:
-            return False, "PyMuPDF is not available"
+            errors.append("PyMuPDF is not available")
         try:
-            with fitz.open(str(path)) as document:
-                if document.page_count <= 0:
-                    return False, "PDF has no pages"
-            return True, "verified"
-        except Exception as exc:
-            return False, str(exc)
+            import pikepdf
+            try:
+                with pikepdf.Pdf.open(str(path)) as document:
+                    if len(document.pages) <= 0:
+                        return False, "PDF has no pages"
+                return True, "verified"
+            except Exception as exc:
+                errors.append(f"pikepdf: {exc}")
+        except Exception:
+            errors.append("pikepdf is not available")
+        return False, "; ".join(errors)
     return True, "generic file"
 
 
@@ -532,7 +545,7 @@ def optimize_pdf(source: Path, target: Path) -> tuple[bool, str]:
 
         best, engine = min(candidates, key=lambda item: item[0].stat().st_size)
         shutil.copy2(best, target)
-    return True, "verified"
+    return True, f"PDF optimized with {engine}"
 
 
 def optimize_generic_file(source: Path, target: Path) -> tuple[bool, str]:
@@ -637,6 +650,8 @@ def optimize_one(source: Path, options: OptimizeOptions) -> OptimizeResult:
                 return OptimizeResult(str(source), "skipped", message, original_size, original_size, 0)
             return OptimizeResult(str(source), "error", message, original_size, original_size, 0)
         result = accept_candidate(source, candidate, final_output, options)
+        if result.status == "optimized":
+            result.message = message
         result.elapsed_seconds = round(time.time() - started, 3)
         return result
 

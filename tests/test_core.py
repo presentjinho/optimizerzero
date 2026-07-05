@@ -322,6 +322,8 @@ class CoreTests(unittest.TestCase):
             result = optimize_one(source, OptimizeOptions(allow_larger=True))
 
             self.assertEqual(result.status, "optimized")
+            self.assertIn("PDF optimized with", result.message)
+            self.assertTrue(result.output.endswith(".ozero.pdf"))
             ok, message = validate_file(Path(result.output))
             self.assertTrue(ok, message)
 

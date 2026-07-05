@@ -42,6 +42,8 @@ class WebAssetTests(unittest.TestCase):
             if path.suffix.lower() in {".html", ".js", ".css", ".json", ".webmanifest", ".md"} or path.name in {"_headers", "robots.txt"}:
                 text = path.read_text(encoding="utf-8")
                 self.assertFalse(any(marker in text for marker in bad_markers), path.name)
+                self.assertNotIn("?/span", text, path.name)
+                self.assertNotIn("?/button", text, path.name)
 
     def test_app_references_existing_html_ids(self):
         parser = IdParser()
@@ -107,7 +109,7 @@ class WebAssetTests(unittest.TestCase):
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v5', worker)
+        self.assertIn('optimizerzero-web-lite-v6', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")
@@ -268,6 +270,18 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("optimizeGenericFile(file)", app)
         self.assertIn(".ozero.zip", app)
         self.assertIn("Generic-file `.ozero.zip` fallback", readme)
+
+    def test_web_pdf_mode_is_explicit(self):
+        html = self.read("index.html")
+        app = self.read("app.js")
+        readme = self.read("README.md")
+
+        self.assertIn("pdf", html)
+        self.assertIn('const pdfExts = new Set(["pdf"])', app)
+        self.assertIn("async function optimizePdfFile(file)", app)
+        self.assertIn("PDF web safe ZIP", app)
+        self.assertIn("Windows PDF app", app)
+        self.assertIn("PDF cleanup and real PDF rewriting are desktop/Python only.", readme)
 
     def test_web_javascript_syntax(self):
         for script in ("app.js", "service-worker.js"):
