@@ -1,4 +1,4 @@
-const CACHE_NAME = "optimizerzero-web-lite-v5";
+const CACHE_NAME = "optimizerzero-web-lite-v6";
 const APP_ASSETS = [
   "./",
   "./index.html",

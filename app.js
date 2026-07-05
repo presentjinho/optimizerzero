@@ -1,5 +1,6 @@
 const archiveExts = new Set(["zip", "cbz", "epub", "docx", "pptx", "xlsx", "odt", "ods", "odp", "jar"]);
 const imageExts = new Set(["png", "jpg", "jpeg", "webp"]);
+const pdfExts = new Set(["pdf"]);
 const archiveImageExts = new Set(["jpg", "jpeg", "webp"]);
 const imageOptimizableArchiveExts = new Set(["zip", "cbz", "epub", "docx", "pptx", "xlsx", "odt", "ods", "odp", "jar"]);
 const state = { files: [], rejected: [], results: [] };
@@ -98,7 +99,7 @@ function formatBytes(bytes) {
 
 function supported(file) {
   const ext = extOf(file);
-  return archiveExts.has(ext) || imageExts.has(ext) || Boolean(window.JSZip);
+  return archiveExts.has(ext) || imageExts.has(ext) || (pdfExts.has(ext) && Boolean(window.JSZip)) || Boolean(window.JSZip);
 }
 
 function setFiles(files) {
@@ -373,10 +374,23 @@ async function optimizeGenericFile(file) {
   return { status: "optimized", blob, outName, saved: accepted.saved, message: "generic ZIP fallback" };
 }
 
+async function optimizePdfFile(file) {
+  if (!window.JSZip) throw new Error("PDF web mode needs the archive engine.");
+  const result = await optimizeGenericFile(file);
+  if (result.status === "optimized") {
+    return { ...result, message: "PDF web safe ZIP" };
+  }
+  return {
+    status: "skipped",
+    message: `PDF web ZIP not useful: ${result.message}. Use the Windows PDF app for real PDF cleanup.`,
+  };
+}
+
 async function optimizeFile(file) {
   const ext = extOf(file);
   if (imageExts.has(ext)) return optimizeImageFile(file);
   if (archiveExts.has(ext)) return optimizeArchive(file);
+  if (pdfExts.has(ext)) return optimizePdfFile(file);
   return optimizeGenericFile(file);
 }
 
@@ -511,6 +525,7 @@ if ("serviceWorker" in navigator) {
 window.__optimizerZeroWeb = {
   optimizeFile,
   optimizeArchive,
+  optimizePdfFile,
   optimizeGenericFile,
   optimizeImageFile,
   outputAccepted,

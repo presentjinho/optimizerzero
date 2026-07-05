@@ -4,10 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>OptimizerZero Web Lite</title>
-    <meta
-      name="description"
-      content="파일을 서버에 올리지 않고 브라우저 안에서 압축 전략을 고르고 최적화합니다."
-    />
+    <meta name="description" content="파일을 서버에 올리지 않고 브라우저 안에서 안전하게 압축합니다." />
     <meta name="robots" content="noindex,nofollow,noarchive" />
     <meta name="theme-color" content="#111312" />
     <link rel="manifest" href="./manifest.webmanifest" />
@@ -21,8 +18,8 @@
           <p class="eyebrow">local-first compression</p>
           <h1>OptimizerZero Web Lite</h1>
           <p class="summary">
-            서버 업로드 없이 ZIP, CBZ, EPUB, Office/OpenDocument 컨테이너, 이미지, 일반 파일을 줄입니다.
-            한번 열면 브라우저에 캐시되어 오프라인에서도 다시 열 수 있습니다.
+            ZIP, CBZ, EPUB, Office/OpenDocument, 이미지, PDF, 일반 파일을 로컬에서 처리합니다.
+            원본은 보존하고 결과 파일만 새로 내려받습니다.
           </p>
           <p id="appStatus" class="status-pill">ready</p>
         </div>
@@ -31,8 +28,8 @@
           <input id="fileInput" class="visually-hidden" type="file" multiple />
           <div class="drop-mark">OZ</div>
           <div>
-            <strong>파일을 끌어오거나 클릭</strong>
-            <span>zip, cbz, epub, docx, pptx, xlsx, odt, ods, odp, jpg, webp, 기타 파일 zip fallback</span>
+            <strong>파일 추가</strong>
+            <span>zip, cbz, epub, docx, pptx, xlsx, odt, ods, odp, pdf, jpg, png, webp, 기타 파일</span>
           </div>
         </label>
 
@@ -40,28 +37,28 @@
           <label>
             <span>목적</span>
             <select id="intent">
-              <option value="archive" data-message="보관용 추천: 원본 보존, 무손실 중심, 큰 파일 허용.">보관용 - 원본 보존 우선</option>
-              <option value="share" data-message="공유용 추천: 균형 압축, 낮은 손실, 화질 88." selected>공유용 - 적당히 작게</option>
-              <option value="messenger" data-message="메신저용 추천: 용량 우선, 결과 확인 후 사용.">메신저용 - 용량 우선</option>
-              <option value="email" data-message="이메일 추천: 첨부 제한에 맞추고 중간 손실 압축.">이메일 첨부 - 크기 제한</option>
-              <option value="quality" data-message="화질 우선 추천: 거의 티 안 나게, 절감이 작으면 스킵.">화질 우선 - 최소 손실</option>
+              <option value="archive" data-message="보관 추천: 원본 보존, 무손실 중심, 큰 파일 허용.">보관 - 원본 보존</option>
+              <option value="share" data-message="공유 추천: 균형 압축, 낮은 손실, 화질 88." selected>공유 - 균형 압축</option>
+              <option value="messenger" data-message="메신저 추천: 용량 우선, 결과 확인 후 사용.">메신저 - 용량 우선</option>
+              <option value="email" data-message="이메일 추천: 첨부 제한에 맞춤.">이메일 - 첨부 제한</option>
+              <option value="quality" data-message="화질 추천: 거의 같게, 절감이 작으면 스킵.">화질 - 최소 손실</option>
             </select>
           </label>
           <label>
             <span>프로필</span>
             <select id="profile">
-              <option value="safe">safe - 구조 재압축</option>
-              <option value="balanced" selected>balanced - 보수 압축</option>
+              <option value="safe">safe - 안전 우선</option>
+              <option value="balanced" selected>balanced - 균형</option>
               <option value="strong">strong - 강한 압축</option>
             </select>
           </label>
           <label>
             <span>손실 허용</span>
             <select id="lossBudget">
-              <option value="">목적 기준</option>
+              <option value="">목적에 맞춤</option>
               <option value="none">none - 원본 보존</option>
-              <option value="low">low - 거의 티 안 나게</option>
-              <option value="medium">medium - 적당히 작게</option>
+              <option value="low">low - 거의 같게</option>
+              <option value="medium">medium - 균형</option>
               <option value="high">high - 용량 우선</option>
             </select>
           </label>
@@ -99,13 +96,13 @@
         </div>
 
         <div id="recommendation" class="recommendation">
-          공유용 추천: 균형 압축, 낮은 손실, 화질 88.
+          공유 추천: 균형 압축, 낮은 손실, 화질 88.
         </div>
 
         <div class="action-row">
-          <button id="runButton" class="primary" type="button">최적화 시작</button>
-          <button id="clearButton" type="button">목록 비우기</button>
-          <button id="reportButton" type="button" disabled>리포트 저장</button>
+          <button id="runButton" class="primary" type="button">시작</button>
+          <button id="clearButton" type="button">비우기</button>
+          <button id="reportButton" type="button" disabled>리포트</button>
           <button id="bundleButton" type="button" disabled>결과 ZIP</button>
         </div>
 
@@ -118,14 +115,14 @@
         <div class="workspace-header">
           <div>
             <p class="eyebrow">queue</p>
-            <h2>작업 목록</h2>
+            <h2>파일 목록</h2>
           </div>
           <p id="totals">0 files</p>
         </div>
 
         <div id="emptyState" class="empty-state">
           <p>아직 파일이 없습니다.</p>
-          <span>작은 샘플 파일로 먼저 테스트해보세요. 원본은 건드리지 않습니다.</span>
+          <span>작은 파일로 먼저 테스트해보세요. 원본은 건드리지 않습니다.</span>
         </div>
 
         <div id="fileList" class="file-list"></div>

@@ -30,8 +30,10 @@ body {
     var(--bg);
   color: var(--text);
   font-family: "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+  font-synthesis: none;
   line-height: 1.5;
   word-break: keep-all;
+  overflow-wrap: break-word;
 }
 button, select, input { font: inherit; }
 .shell {
@@ -113,6 +115,10 @@ select, button, input[type="range"] {
   color: var(--text);
   font-size: 16px;
 }
+select, button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 input[type="range"] { accent-color: var(--accent); padding: 0 8px; }
 .recommendation {
   padding: 12px;
@@ -164,7 +170,7 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   background: #151816;
 }
 .file-name, .file-meta { display: block; overflow-wrap: anywhere; }
-.file-meta, .file-status { color: var(--muted); font-size: 13px; }
+.file-meta, .file-status { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .file-status.error { color: var(--danger); }
 .file-status.done { color: var(--accent-2); }
 .remove-button, .download-button { min-height: 38px; }
