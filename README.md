@@ -4,7 +4,7 @@ Static browser version for Netlify-style sharing.
 
 ## What Works
 
-- ZIP/CBZ/EPUB/DOCX/PPTX/XLSX recompression with JSZip
+- ZIP/CBZ/EPUB/DOCX/PPTX/XLSX/ODT/ODS/ODP/JAR recompression with JSZip
 - JPG/JPEG/WEBP recompression inside ZIP/CBZ when visual loss is allowed
 - PNG/JPG/WEBP browser-side image recompression
 - Generic-file `.ozero.zip` fallback when a format-specific optimizer is not available

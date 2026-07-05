@@ -1,7 +1,7 @@
-const archiveExts = new Set(["zip", "cbz", "epub", "docx", "pptx", "xlsx"]);
+const archiveExts = new Set(["zip", "cbz", "epub", "docx", "pptx", "xlsx", "odt", "ods", "odp", "jar"]);
 const imageExts = new Set(["png", "jpg", "jpeg", "webp"]);
 const archiveImageExts = new Set(["jpg", "jpeg", "webp"]);
-const imageOptimizableArchiveExts = new Set(["zip", "cbz", "epub", "docx", "pptx", "xlsx"]);
+const imageOptimizableArchiveExts = new Set(["zip", "cbz", "epub", "docx", "pptx", "xlsx", "odt", "ods", "odp", "jar"]);
 const state = { files: [], rejected: [], results: [] };
 const el = {
   dropZone: document.querySelector("#dropZone"),
