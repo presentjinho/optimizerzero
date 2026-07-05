@@ -70,6 +70,20 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn('state.results = state.results.filter((result) => result.key !== key)', app)
         self.assertIn(".remove-button", css)
 
+    def test_mobile_layout_and_file_picker_are_supported(self):
+        html = self.read("index.html")
+        css = self.read("styles.css")
+        app = self.read("app.js")
+
+        self.assertIn('class="drop-zone" id="dropZone" tabindex="0" for="fileInput"', html)
+        self.assertIn('class="visually-hidden" type="file" multiple', html)
+        self.assertIn("@media (max-width: 560px)", css)
+        self.assertIn("min-height: 100dvh", css)
+        self.assertIn("-webkit-text-size-adjust: 100%", css)
+        self.assertIn('"Noto Sans KR", "Malgun Gothic"', css)
+        self.assertIn("font-size: 16px", css)
+        self.assertNotIn('el.dropZone.addEventListener("click"', app)
+
     def test_intent_options_have_korean_recommendations(self):
         parser = IdParser()
         parser.feed(self.read("index.html"))
@@ -93,6 +107,15 @@ class WebAssetTests(unittest.TestCase):
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
+        self.assertIn('optimizerzero-web-lite-v5', worker)
+
+    def test_static_headers_force_utf8_for_korean_text(self):
+        headers = self.read("_headers")
+
+        self.assertIn("Content-Type: text/html; charset=utf-8", headers)
+        self.assertIn("Content-Type: text/css; charset=utf-8", headers)
+        self.assertIn("Content-Type: application/javascript; charset=utf-8", headers)
+        self.assertIn("Content-Type: text/markdown; charset=utf-8", headers)
 
     def test_web_uses_local_jszip_vendor_file(self):
         html = self.read("index.html")

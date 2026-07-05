@@ -1,8 +1,25 @@
 /*
+  Content-Type: text/html; charset=utf-8
   X-Robots-Tag: noindex, nofollow, noarchive
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   Permissions-Policy: camera=(), microphone=(), geolocation=()
 
+/styles.css
+  Content-Type: text/css; charset=utf-8
+
+/app.js
+  Content-Type: application/javascript; charset=utf-8
+
+/README.md
+  Content-Type: text/markdown; charset=utf-8
+
+/PRIVACY.md
+  Content-Type: text/markdown; charset=utf-8
+
+/manifest.webmanifest
+  Content-Type: application/manifest+json; charset=utf-8
+
 /service-worker.js
+  Content-Type: application/javascript; charset=utf-8
   Cache-Control: no-cache

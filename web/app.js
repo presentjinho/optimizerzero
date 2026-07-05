@@ -466,9 +466,11 @@ async function saveBundle() {
   URL.revokeObjectURL(url);
 }
 
-el.dropZone.addEventListener("click", () => el.fileInput.click());
 el.dropZone.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" || event.key === " ") el.fileInput.click();
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    el.fileInput.click();
+  }
 });
 el.fileInput.addEventListener("change", (event) => setFiles(event.target.files));
 el.intent.addEventListener("change", applyIntent);
