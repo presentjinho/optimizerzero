@@ -84,6 +84,7 @@ Cloudflare Pages can also read `wrangler.toml`, which points Pages at `./web`.
 See `docs/STRATEGY_KO.md` for positioning and sharing strategy.
 See `docs/DEPLOY_FREE_KO.md` for free hosting and domain options.
 See `docs/PRIVATE_DEPLOY_KO.md` for private-first deployment.
+See `docs/LOCAL_FIRST_ARCHITECTURE_KO.md` for the no-server-data architecture decision.
 See `docs/GITHUB_SECRETS_CLOUDFLARE_KO.md` for GitHub Actions Cloudflare secret setup.
 See `docs/PRIVACY_KO.md` for the local-processing/privacy note.
 Use `docs/CLOUDFLARE_PRIVATE_CHECKLIST_KO.md` when creating the private Cloudflare Pages app.

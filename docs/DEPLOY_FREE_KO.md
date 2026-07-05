@@ -9,6 +9,7 @@
 3. GitHub Pages 백업: `username.github.io/optimizerzero`
 
 OptimizerZero Web Lite는 정적 파일만 쓰므로 서버 비용 없이 오래 열어두기 좋다.
+사용자 파일은 서버에 저장하지 않는 local-first 구조를 유지한다. 자세한 기준은 `docs/LOCAL_FIRST_ARCHITECTURE_KO.md`를 따른다.
 
 ## 추천 1: Cloudflare Pages
 

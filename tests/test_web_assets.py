@@ -111,6 +111,17 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("does not include analytics", privacy)
         self.assertIn("JSZip is bundled", privacy)
 
+    def test_local_first_architecture_doc_matches_no_server_data_decision(self):
+        doc = (ROOT / "docs" / "LOCAL_FIRST_ARCHITECTURE_KO.md").read_text(encoding="utf-8")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("서버 저장 없는 정적 웹앱", doc)
+        self.assertIn("Cloudflare Pages", doc)
+        self.assertIn("파일 처리: 브라우저 내부", doc)
+        self.assertIn("중앙 DB: 사용하지 않는다", doc)
+        self.assertIn("서버 업로드 압축: 사용하지 않는다", doc)
+        self.assertIn("docs/LOCAL_FIRST_ARCHITECTURE_KO.md", readme)
+
     def test_cloudflare_pages_config_points_to_web(self):
         wrangler = (ROOT / "wrangler.toml").read_text(encoding="utf-8")
 
