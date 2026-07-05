@@ -185,6 +185,17 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("python -m unittest discover -s tests -v", workflow)
         self.assertIn(".\\verify-web.ps1", workflow)
 
+    def test_private_preview_auth_uses_cloudflare_secret(self):
+        middleware = (ROOT / "functions" / "_middleware.js").read_text(encoding="utf-8")
+
+        self.assertIn("OPTIMIZERZERO_PASSWORD", middleware)
+        self.assertIn("OPTIMIZERZERO_USER", middleware)
+        self.assertIn("WWW-Authenticate", middleware)
+        self.assertIn("context.next()", middleware)
+        self.assertIn('guarded.headers.set("Cache-Control", "no-store")', middleware)
+        self.assertIn('guarded.headers.set("Vary", "Authorization")', middleware)
+        self.assertNotIn("password123", middleware.lower())
+
     def test_cloudflare_secrets_docs_exist(self):
         doc = (ROOT / "docs" / "GITHUB_SECRETS_CLOUDFLARE_KO.md").read_text(encoding="utf-8")
 

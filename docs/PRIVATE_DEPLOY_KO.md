@@ -17,6 +17,7 @@ Cloudflare Pages URL은 기본적으로 public이다.
 비공개로 쓰려면 둘 중 하나가 필요하다.
 
 - 진짜 비공개: Cloudflare Access 적용
+- 현재 비공개 테스트: Cloudflare Pages Function Basic Auth
 - 임시 비공개: private GitHub repo + 링크 미공유 + noindex
 
 OptimizerZero는 `robots.txt`, `<meta name="robots">`, `_headers`에 noindex를 넣어 검색 노출을 막는다.
@@ -47,6 +48,10 @@ Cloudflare Access:
 - policy: Allow
 - rule: Emails
 - allowed emails: 본인 이메일만 먼저 추가
+
+현재는 Access API 권한 없이 바로 잠그기 위해 `functions/_middleware.js`로 Basic Auth를 적용한다.
+비밀번호는 repository에 넣지 않고 Cloudflare Pages secret `OPTIMIZERZERO_PASSWORD`에만 저장한다.
+사용자 파일은 계속 브라우저 안에서만 처리되며 서버에 저장하지 않는다.
 
 ## 순서
 

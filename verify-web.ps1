@@ -36,6 +36,7 @@ $PythonExe = Get-PythonExe
 
 node --check web\app.js
 node --check web\service-worker.js
+node --check functions\_middleware.js
 & $PythonExe -m unittest tests.test_web_assets -v
 
 function Assert-TextContains {
