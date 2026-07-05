@@ -27,14 +27,14 @@
           <p id="appStatus" class="status-pill">ready</p>
         </div>
 
-        <div class="drop-zone" id="dropZone" tabindex="0">
-          <input id="fileInput" type="file" multiple hidden />
+        <label class="drop-zone" id="dropZone" tabindex="0" for="fileInput">
+          <input id="fileInput" class="visually-hidden" type="file" multiple />
           <div class="drop-mark">OZ</div>
           <div>
             <strong>파일을 끌어오거나 클릭</strong>
             <span>zip, cbz, epub, docx, pptx, xlsx, odt, ods, odp, jpg, webp, 기타 파일 zip fallback</span>
           </div>
-        </div>
+        </label>
 
         <div class="settings-grid">
           <label>

@@ -12,15 +12,26 @@
   --shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
 }
 * { box-sizing: border-box; }
+html {
+  width: 100%;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 body {
   margin: 0;
+  width: 100%;
   min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
   background:
     linear-gradient(135deg, rgba(215, 255, 103, 0.08), transparent 34%),
     repeating-linear-gradient(90deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 80px),
     var(--bg);
   color: var(--text);
-  font-family: "Segoe UI", "Noto Sans KR", sans-serif;
+  font-family: "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+  line-height: 1.5;
+  word-break: keep-all;
 }
 button, select, input { font: inherit; }
 .shell {
@@ -28,7 +39,8 @@ button, select, input { font: inherit; }
   grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
   gap: 18px;
   min-height: 100vh;
-  padding: 18px;
+  min-height: 100dvh;
+  padding: max(14px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
 }
 .control-panel, .workspace {
   border: 1px solid var(--line);
@@ -37,14 +49,14 @@ button, select, input { font: inherit; }
 }
 .control-panel { display: flex; flex-direction: column; gap: 18px; padding: 24px; }
 .brand-block h1, .workspace h2 { margin: 0; letter-spacing: 0; }
-.brand-block h1 { max-width: 10ch; font-size: clamp(42px, 7vw, 76px); line-height: 0.9; }
+.brand-block h1 { max-width: 10ch; font-size: clamp(40px, 7vw, 76px); line-height: 0.96; overflow-wrap: anywhere; }
 .workspace h2 { font-size: 28px; }
 .eyebrow {
   margin: 0 0 8px;
   color: var(--accent);
   font-size: 12px;
   font-weight: 800;
-  letter-spacing: 0.14em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 .summary { margin: 18px 0 0; color: var(--muted); line-height: 1.6; }
@@ -67,6 +79,16 @@ button, select, input { font: inherit; }
   border: 1px dashed #64705d;
   background: var(--panel-2);
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
 }
 .drop-zone.dragging { border-color: var(--accent); background: #25301e; }
 .drop-mark {
@@ -89,6 +111,7 @@ select, button, input[type="range"] {
   border: 1px solid var(--line);
   background: #0f1110;
   color: var(--text);
+  font-size: 16px;
 }
 input[type="range"] { accent-color: var(--accent); padding: 0 8px; }
 .recommendation {
@@ -153,7 +176,86 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   line-height: 1;
 }
 @media (max-width: 860px) {
-  .shell { grid-template-columns: 1fr; }
-  .brand-block h1 { max-width: none; font-size: 46px; }
-  .file-row { grid-template-columns: 1fr; }
+  .shell {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 12px;
+  }
+  .control-panel, .workspace {
+    width: 100%;
+  }
+  .control-panel {
+    padding: 18px;
+  }
+  .workspace {
+    padding: 16px;
+  }
+  .brand-block h1 {
+    max-width: none;
+    font-size: 42px;
+  }
+  .workspace-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .file-row {
+    grid-template-columns: minmax(0, 1fr) 44px;
+    gap: 10px;
+  }
+  .file-main,
+  .file-status,
+  .download-button {
+    grid-column: 1 / -1;
+  }
+  .remove-button {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+@media (max-width: 560px) {
+  .shell {
+    padding: 8px;
+  }
+  .control-panel {
+    gap: 14px;
+    padding: 14px;
+  }
+  .brand-block h1 {
+    font-size: 34px;
+  }
+  .summary {
+    margin-top: 12px;
+    font-size: 14px;
+  }
+  .drop-zone {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 12px;
+    min-height: 104px;
+    padding: 12px;
+  }
+  .drop-mark {
+    width: 48px;
+    font-size: 14px;
+  }
+  .settings-grid {
+    gap: 10px;
+  }
+  .action-row {
+    grid-template-columns: 1fr;
+  }
+  .action-row .primary {
+    grid-column: auto;
+  }
+  .workspace {
+    padding: 12px;
+  }
+  .empty-state {
+    min-height: 180px;
+    padding: 18px;
+  }
+  .file-row {
+    min-height: 0;
+    padding: 12px;
+  }
 }
