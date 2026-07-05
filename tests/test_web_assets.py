@@ -150,9 +150,15 @@ class WebAssetTests(unittest.TestCase):
 
     def test_release_package_reuses_web_package_script(self):
         script = (ROOT / "package-release.ps1").read_text(encoding="utf-8")
+        build = (ROOT / "build-windows.ps1").read_text(encoding="utf-8")
+        verify = (ROOT / "verify-release.ps1").read_text(encoding="utf-8")
 
         self.assertIn('"package-web.ps1"', script)
         self.assertNotIn("Compress-Archive -Path $webFiles.FullName", script)
+        self.assertIn("[switch]$Lite", script)
+        self.assertIn("windows-pdf.zip", script)
+        self.assertIn("python -m pip install \".[pdf]\"", build)
+        self.assertIn("windows-pdf.zip", verify)
 
     def test_release_verify_writes_artifact_manifest(self):
         script = (ROOT / "verify-release.ps1").read_text(encoding="utf-8")
@@ -211,6 +217,7 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("archive engine ready", app)
         self.assertIn("image-only / archive engine unavailable", app)
         self.assertIn("Archive engine unavailable. Standalone images still work.", app)
+        self.assertIn("archive engine unavailable", app)
 
     def test_web_recompresses_images_inside_supported_containers(self):
         app = self.read("app.js")
@@ -227,6 +234,16 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("return { blob: data, changed: false, skipped: true }", app)
         self.assertIn("imageEntriesSkipped", app)
         self.assertIn("image entries kept original", app)
+
+    def test_web_has_generic_zip_fallback(self):
+        app = self.read("app.js")
+        readme = self.read("README.md")
+
+        self.assertIn("async function optimizeGenericFile(file)", app)
+        self.assertIn("generic ZIP fallback", app)
+        self.assertIn("optimizeGenericFile(file)", app)
+        self.assertIn(".ozero.zip", app)
+        self.assertIn("Generic-file `.ozero.zip` fallback", readme)
 
     def test_web_javascript_syntax(self):
         for script in ("app.js", "service-worker.js"):

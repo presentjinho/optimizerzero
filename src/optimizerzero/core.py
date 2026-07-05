@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import time
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path, PurePosixPath
@@ -26,6 +27,7 @@ IMAGE_ARCHIVE_EXTS = {".zip", ".cbz"}
 IMAGE_OPTIMIZABLE_CONTAINER_EXTS = ARCHIVE_EXTS
 OFFICE_EXTS = {".docx", ".pptx", ".xlsx"}
 DEFAULT_IGNORE_DIRS = {".git", ".hg", ".svn", ".venv", "__pycache__", "build", "dist", "node_modules", "releases"}
+DEFAULT_IGNORE_SUFFIXES = {".pyc", ".pyo"}
 
 
 class Profile(str, Enum):
@@ -41,8 +43,15 @@ class LossBudget(str, Enum):
     HIGH = "high"
 
 
+class Goal(str, Enum):
+    SMART = "smart"
+    QUALITY = "quality"
+    SMALLEST = "smallest"
+
+
 @dataclass(frozen=True)
 class OptimizeOptions:
+    goal: Goal = Goal.SMART
     profile: Profile = Profile.SAFE
     recursive: bool = False
     output_dir: Path | None = None
@@ -55,6 +64,8 @@ class OptimizeOptions:
     loss_budget: LossBudget | None = None
     image_quality: int | None = None
     target_size_bytes: int | None = None
+    generic_fallback: bool = True
+    workers: int = 1
 
 
 @dataclass
@@ -105,7 +116,21 @@ def kind_for_suffix(suffix: str) -> str:
         return "archive"
     if suffix in ARCHIVE_EXTS:
         return "container"
-    return "unsupported"
+    return "generic"
+
+
+def options_for_goal(goal: Goal) -> OptimizeOptions:
+    if goal == Goal.QUALITY:
+        return OptimizeOptions(goal=goal, profile=Profile.SAFE, loss_budget=LossBudget.NONE, min_savings_percent=0.5)
+    if goal == Goal.SMALLEST:
+        return OptimizeOptions(goal=goal, profile=Profile.STRONG, loss_budget=LossBudget.HIGH, image_quality=70, min_savings_percent=1.0)
+    return OptimizeOptions(goal=goal, profile=Profile.BALANCED, loss_budget=LossBudget.LOW, image_quality=88, min_savings_percent=1.0)
+
+
+def merge_goal_options(goal: Goal, **overrides) -> OptimizeOptions:
+    base = asdict(options_for_goal(goal))
+    base.update({key: value for key, value in overrides.items() if value is not None})
+    return OptimizeOptions(**base)
 
 
 def format_bytes(value: int) -> str:
@@ -156,30 +181,42 @@ def quality_ladder(options: OptimizeOptions) -> list[int]:
     return [78, 70, 62, 54, 46]
 
 
-def discover_files(paths: Iterable[Path], recursive: bool) -> list[Path]:
+def should_consider_file(path: Path, generic_fallback: bool = True) -> bool:
+    if any(part in DEFAULT_IGNORE_DIRS for part in path.parts):
+        return False
+    suffix = path.suffix.lower()
+    if suffix in DEFAULT_IGNORE_SUFFIXES:
+        return False
+    if ".ozero" in path.name:
+        return False
+    return suffix in SUPPORTED_EXTS or generic_fallback
+
+
+def discover_files(paths: Iterable[Path], recursive: bool, generic_fallback: bool = True) -> list[Path]:
     found: list[Path] = []
     for raw in paths:
         path = Path(raw)
-        if path.is_file() and path.suffix.lower() in SUPPORTED_EXTS:
+        if path.is_file() and should_consider_file(path, generic_fallback=generic_fallback):
             found.append(path)
         elif path.is_dir():
             iterator = path.rglob("*") if recursive else path.glob("*")
             found.extend(
                 p for p in iterator
-                if p.is_file() and p.suffix.lower() in SUPPORTED_EXTS and not any(part in DEFAULT_IGNORE_DIRS for part in p.parts)
+                if p.is_file() and should_consider_file(p, generic_fallback=generic_fallback)
             )
     return sorted(dict.fromkeys(p.resolve() for p in found))
 
 
-def analyze_files(paths: Iterable[Path], recursive: bool, verify: bool = False) -> list[FileAnalysis]:
+def analyze_files(paths: Iterable[Path], recursive: bool, verify: bool = False, generic_fallback: bool = True) -> list[FileAnalysis]:
     analyses: list[FileAnalysis] = []
-    for path in discover_files(paths, recursive=recursive):
+    for path in discover_files(paths, recursive=recursive, generic_fallback=generic_fallback):
         suffix = path.suffix.lower()
         valid: bool | None = None
         message = ""
         if verify:
             valid, message = validate_file(path)
-        analyses.append(FileAnalysis(str(path), suffix.lstrip("."), kind_for_suffix(suffix), path.stat().st_size, True, valid, message))
+        supported = suffix in SUPPORTED_EXTS or generic_fallback
+        analyses.append(FileAnalysis(str(path), suffix.lstrip("."), kind_for_suffix(suffix), path.stat().st_size, supported, valid, message))
     return analyses
 
 
@@ -212,11 +249,12 @@ def planned_output_path(source: Path, options: OptimizeOptions) -> Path:
     if options.in_place:
         return source
     parent = options.output_dir if options.output_dir else source.parent
-    base = parent / f"{source.stem}.ozero{source.suffix}"
+    output_suffix = source.suffix if source.suffix.lower() in SUPPORTED_EXTS else ".zip"
+    base = parent / f"{source.stem}.ozero{output_suffix}"
     if not base.exists():
         return base
     for index in range(2, 10_000):
-        candidate = parent / f"{source.stem}.ozero-{index}{source.suffix}"
+        candidate = parent / f"{source.stem}.ozero-{index}{output_suffix}"
         if not candidate.exists():
             return candidate
     raise RuntimeError(f"too many existing output files for {source.name}")
@@ -300,7 +338,7 @@ def validate_file(path: Path) -> tuple[bool, str]:
             return True, "verified"
         except Exception as exc:
             return False, str(exc)
-    return False, "unsupported file type"
+    return True, "generic file"
 
 
 def image_save_args(original_format: str, quality: int | None = None) -> tuple[str, dict] | None:
@@ -395,6 +433,12 @@ def optimize_pdf(source: Path, target: Path) -> tuple[bool, str]:
     return True, "verified"
 
 
+def optimize_generic_file(source: Path, target: Path) -> tuple[bool, str]:
+    with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        archive.write(source, arcname=safe_zip_name(source.name))
+    return validate_zip(target, {safe_zip_name(source.name)})
+
+
 def optimize_standalone_image(source: Path, target: Path, options: OptimizeOptions) -> tuple[bool, str]:
     data = source.read_bytes()
     optimized = optimize_image_bytes(data, options, options.target_size_bytes)
@@ -457,7 +501,7 @@ def optimize_one(source: Path, options: OptimizeOptions) -> OptimizeResult:
     original_size = source.stat().st_size if source.exists() else 0
     if not source.exists():
         return OptimizeResult(str(source), "error", "source not found", 0, 0, 0)
-    if source.suffix.lower() not in SUPPORTED_EXTS:
+    if source.suffix.lower() not in SUPPORTED_EXTS and not options.generic_fallback:
         return OptimizeResult(str(source), "skipped", "unsupported file type", original_size, original_size, 0)
     if options.max_size_bytes is not None and original_size > options.max_size_bytes:
         return OptimizeResult(str(source), "skipped", f"larger than limit: {format_bytes(options.max_size_bytes)}", original_size, original_size, 0)
@@ -465,7 +509,8 @@ def optimize_one(source: Path, options: OptimizeOptions) -> OptimizeResult:
     if options.dry_run:
         return OptimizeResult(str(source), "planned", f"would write {final_output}", original_size, original_size, 0, str(final_output))
     with tempfile.TemporaryDirectory(prefix="optimizerzero_") as temp_dir_raw:
-        candidate = Path(temp_dir_raw) / f"candidate{source.suffix.lower()}"
+        candidate_suffix = source.suffix.lower() if source.suffix.lower() in SUPPORTED_EXTS else ".zip"
+        candidate = Path(temp_dir_raw) / f"candidate{candidate_suffix}"
         suffix = source.suffix.lower()
         try:
             if suffix in ARCHIVE_EXTS:
@@ -474,6 +519,10 @@ def optimize_one(source: Path, options: OptimizeOptions) -> OptimizeResult:
                 ok, message = optimize_pdf(source, candidate)
             elif suffix in IMAGE_EXTS:
                 ok, message = optimize_standalone_image(source, candidate, options)
+            elif options.in_place:
+                ok, message = False, "generic ZIP fallback cannot replace the original in place"
+            elif options.generic_fallback:
+                ok, message = optimize_generic_file(source, candidate)
             else:
                 ok, message = False, "unsupported file type"
         except Exception as exc:
@@ -485,6 +534,26 @@ def optimize_one(source: Path, options: OptimizeOptions) -> OptimizeResult:
         result = accept_candidate(source, candidate, final_output, options)
         result.elapsed_seconds = round(time.time() - started, 3)
         return result
+
+
+def optimize_many(files: Iterable[Path], options: OptimizeOptions) -> list[OptimizeResult]:
+    files = list(files)
+    workers = max(1, min(options.workers or 1, len(files) or 1))
+    if workers == 1:
+        return [optimize_one(path, options) for path in files]
+
+    results_by_index: dict[int, OptimizeResult] = {}
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_index = {executor.submit(optimize_one, path, options): index for index, path in enumerate(files)}
+        for future in as_completed(future_to_index):
+            index = future_to_index[future]
+            try:
+                results_by_index[index] = future.result()
+            except Exception as exc:
+                source = files[index]
+                original_size = source.stat().st_size if source.exists() else 0
+                results_by_index[index] = OptimizeResult(str(source), "error", str(exc), original_size, original_size, 0)
+    return [results_by_index[index] for index in range(len(files))]
 
 
 def write_report(path: Path, results: list[OptimizeResult]) -> None:

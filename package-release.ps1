@@ -1,5 +1,5 @@
 param(
-  [switch]$IncludePdf
+  [switch]$Lite
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,8 +12,8 @@ foreach ($path in @("build", "dist", "releases", "OptimizerZero.spec")) {
   }
 }
 
-if ($IncludePdf) {
-  & (Join-Path $PSScriptRoot "build-windows.ps1") -IncludePdf
+if ($Lite) {
+  & (Join-Path $PSScriptRoot "build-windows.ps1") -Lite
 }
 else {
   & (Join-Path $PSScriptRoot "build-windows.ps1")
@@ -22,7 +22,7 @@ else {
 $releaseDir = Join-Path $PSScriptRoot "releases"
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 
-$zipName = if ($IncludePdf) { "OptimizerZero-0.1.0-windows-pdf.zip" } else { "OptimizerZero-0.1.0-windows-lite.zip" }
+$zipName = if ($Lite) { "OptimizerZero-0.1.0-windows-lite.zip" } else { "OptimizerZero-0.1.0-windows-pdf.zip" }
 $zipPath = Join-Path $releaseDir $zipName
 Compress-Archive -LiteralPath (Join-Path $PSScriptRoot "dist\OptimizerZero") -DestinationPath $zipPath -Force
 

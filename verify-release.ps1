@@ -1,5 +1,5 @@
 param(
-  [string]$ReleaseZip = "releases\OptimizerZero-0.1.0-windows-lite.zip",
+  [string]$ReleaseZip = "releases\OptimizerZero-0.1.0-windows-pdf.zip",
   [string]$WebZip = "releases\OptimizerZero-0.1.0-web-lite.zip"
 )
 

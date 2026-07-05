@@ -1,5 +1,5 @@
 param(
-  [switch]$IncludePdf
+  [switch]$Lite
 )
 
 $ErrorActionPreference = "Stop"
@@ -8,12 +8,12 @@ Set-Location -LiteralPath $PSScriptRoot
 python -m pip install --upgrade pip
 python -m pip install -e .
 python -m pip install pyinstaller
-if ($IncludePdf) {
+if (-not $Lite) {
   python -m pip install ".[pdf]"
 }
 
 $hiddenImports = @("PIL._tkinter_finder")
-if ($IncludePdf) {
+if (-not $Lite) {
   $hiddenImports += "fitz"
 }
 
@@ -40,6 +40,6 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot "docs\DIST_README.txt") -Destina
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "docs\GITHUB_RELEASE_DRAFT.md") -Destination (Join-Path $dist "RELEASE_NOTES.md") -Force
 
 Write-Host "Built: $(Join-Path $dist 'OptimizerZero.exe')"
-if (-not $IncludePdf) {
-  Write-Host "Note: lightweight build excludes bundled PyMuPDF; run with -IncludePdf for PDF cleanup support."
+if ($Lite) {
+  Write-Host "Note: lite build excludes bundled PyMuPDF; use the default build for PDF cleanup support."
 }

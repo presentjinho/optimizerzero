@@ -3,24 +3,31 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import sys
 from dataclasses import asdict
 from pathlib import Path
 
 from . import __version__
 from .core import (
+    Goal,
     LossBudget,
-    OptimizeOptions,
     Profile,
     analyze_files,
     discover_files,
     find_duplicate_files,
     format_bytes,
-    optimize_one,
+    merge_goal_options,
+    optimize_many,
     parse_size,
     validate_file,
     write_report,
 )
+
+
+def default_workers() -> int:
+    cpu_count = os.cpu_count() or 2
+    return max(1, min(4, cpu_count - 1 if cpu_count > 1 else 1))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -32,12 +39,14 @@ def build_parser() -> argparse.ArgumentParser:
     scan = sub.add_parser("scan", help="list supported files")
     scan.add_argument("paths", nargs="+", type=Path)
     scan.add_argument("-r", "--recursive", action="store_true")
+    scan.add_argument("--supported-only", action="store_true", help="exclude generic ZIP fallback candidates")
 
     analyze = sub.add_parser("analyze", help="summarize supported files by type")
     analyze.add_argument("paths", nargs="+", type=Path)
     analyze.add_argument("-r", "--recursive", action="store_true")
     analyze.add_argument("--verify", action="store_true")
     analyze.add_argument("--report", type=Path)
+    analyze.add_argument("--supported-only", action="store_true", help="exclude generic ZIP fallback candidates")
 
     duplicates = sub.add_parser("duplicates", help="find byte-identical supported files")
     duplicates.add_argument("paths", nargs="+", type=Path)
@@ -47,10 +56,12 @@ def build_parser() -> argparse.ArgumentParser:
     verify = sub.add_parser("verify", help="verify supported files without optimizing")
     verify.add_argument("paths", nargs="+", type=Path)
     verify.add_argument("-r", "--recursive", action="store_true")
+    verify.add_argument("--supported-only", action="store_true", help="exclude generic ZIP fallback candidates")
 
     opt = sub.add_parser("optimize", help="optimize files or folders")
     opt.add_argument("paths", nargs="+", type=Path)
     opt.add_argument("-r", "--recursive", action="store_true")
+    opt.add_argument("--goal", choices=[goal.value for goal in Goal], default=Goal.SMART.value, help="simple compression goal")
     opt.add_argument("--profile", choices=[p.value for p in Profile], default=Profile.SAFE.value)
     opt.add_argument("--output-dir", type=Path)
     opt.add_argument("--in-place", action="store_true")
@@ -58,11 +69,13 @@ def build_parser() -> argparse.ArgumentParser:
     opt.add_argument("--allow-larger", action="store_true")
     opt.add_argument("--dry-run", action="store_true")
     opt.add_argument("--report", type=Path)
-    opt.add_argument("--min-savings-percent", type=float, default=0.0)
+    opt.add_argument("--min-savings-percent", type=float)
     opt.add_argument("--max-size", help="skip files above this size, e.g. 75MB or 2GB")
     opt.add_argument("--loss-budget", choices=[budget.value for budget in LossBudget], help="allowed visual loss for images")
     opt.add_argument("--quality", type=int, help="image quality 1-100 for JPEG/WEBP")
     opt.add_argument("--target-size", help="per-file target output size, e.g. 5MB")
+    opt.add_argument("--workers", type=int, default=0, help="parallel local workers; 0 uses a safe CPU-based default")
+    opt.add_argument("--supported-only", action="store_true", help="disable generic ZIP fallback for unknown file types")
 
     sub.add_parser("gui", help="open the desktop GUI")
     return parser
@@ -79,6 +92,7 @@ def main(argv: list[str] | None = None) -> int:
         }
         for name, ok in checks.items():
             print(f"{name}: {'ok' if ok else 'missing'}")
+        print(f"CPU workers: {default_workers()}")
         return 0 if checks["Pillow"] else 1
 
     if args.command == "gui":
@@ -86,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
         return gui_main()
 
     if args.command == "analyze":
-        analyses = analyze_files(args.paths, recursive=args.recursive, verify=args.verify)
+        analyses = analyze_files(args.paths, recursive=args.recursive, verify=args.verify, generic_fallback=not args.supported_only)
         by_kind: dict[str, list] = {}
         for item in analyses:
             by_kind.setdefault(item.kind, []).append(item)
@@ -121,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"report: {args.report}")
         return 0
 
-    files = discover_files(args.paths, recursive=args.recursive)
+    files = discover_files(args.paths, recursive=args.recursive, generic_fallback=not getattr(args, "supported_only", False))
     if args.command == "verify":
         if not files:
             print("files: 0")
@@ -151,8 +165,11 @@ def main(argv: list[str] | None = None) -> int:
         print("Refusing --in-place without --yes. OptimizerZero preserves originals by default.")
         return 2
 
-    options = OptimizeOptions(
-        profile=Profile(args.profile),
+    explicit_profile = args.profile != Profile.SAFE.value
+    workers = args.workers if args.workers and args.workers > 0 else default_workers()
+    options = merge_goal_options(
+        Goal(args.goal),
+        profile=Profile(args.profile) if explicit_profile else None,
         recursive=args.recursive,
         output_dir=args.output_dir,
         in_place=args.in_place,
@@ -163,11 +180,11 @@ def main(argv: list[str] | None = None) -> int:
         loss_budget=LossBudget(args.loss_budget) if args.loss_budget else None,
         image_quality=args.quality,
         target_size_bytes=parse_size(args.target_size),
+        generic_fallback=not args.supported_only,
+        workers=workers,
     )
-    results = []
-    for path in files:
-        result = optimize_one(path, options)
-        results.append(result)
+    results = optimize_many(files, options)
+    for result in results:
         print(f"{result.status}: {Path(result.source).name} | saved: {format_bytes(max(0, result.saved_bytes))} | {result.message}")
     optimized = sum(1 for result in results if result.status == "optimized")
     skipped = sum(1 for result in results if result.status == "skipped")

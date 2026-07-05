@@ -98,7 +98,7 @@ function formatBytes(bytes) {
 
 function supported(file) {
   const ext = extOf(file);
-  return archiveExts.has(ext) || imageExts.has(ext);
+  return archiveExts.has(ext) || imageExts.has(ext) || Boolean(window.JSZip);
 }
 
 function setFiles(files) {
@@ -107,7 +107,7 @@ function setFiles(files) {
   state.rejected = [];
   for (const file of files) {
     if (!supported(file)) {
-      state.rejected.push({ name: file.name, reason: "unsupported type" });
+      state.rejected.push({ name: file.name, reason: "archive engine unavailable" });
     } else if (file.size > maxBytes) {
       state.rejected.push({ name: file.name, reason: `over ${el.limit.value} MB` });
     } else {
@@ -357,11 +357,27 @@ async function optimizeArchive(file) {
   return { status: "optimized", blob, outName, saved: accepted.saved, message: detail };
 }
 
+async function optimizeGenericFile(file) {
+  if (!window.JSZip) throw new Error("Archive engine unavailable.");
+  const output = new JSZip();
+  output.file(safeArchiveName(file.name), file);
+  const blob = await output.generateAsync({
+    type: "blob",
+    compression: "DEFLATE",
+    compressionOptions: { level: 9 },
+    mimeType: "application/zip",
+  });
+  const accepted = outputAccepted(file.size, blob.size);
+  if (!accepted.ok) return { status: "skipped", message: accepted.message };
+  const outName = file.name.replace(/(\.[^.]+)?$/, ".ozero.zip");
+  return { status: "optimized", blob, outName, saved: accepted.saved, message: "generic ZIP fallback" };
+}
+
 async function optimizeFile(file) {
   const ext = extOf(file);
   if (imageExts.has(ext)) return optimizeImageFile(file);
   if (archiveExts.has(ext)) return optimizeArchive(file);
-  return { status: "skipped", message: "unsupported" };
+  return optimizeGenericFile(file);
 }
 
 async function run() {
@@ -493,6 +509,7 @@ if ("serviceWorker" in navigator) {
 window.__optimizerZeroWeb = {
   optimizeFile,
   optimizeArchive,
+  optimizeGenericFile,
   optimizeImageFile,
   outputAccepted,
   dependencyStatus,

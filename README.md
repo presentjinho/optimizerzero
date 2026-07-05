@@ -2,15 +2,18 @@
 
 OptimizerZero is a safety-first compression and archive optimizer for local files.
 
-It is user-centered: choose how much space to save, how much visual quality to trade, and when to skip files.
+It is user-centered: start with one practical goal, then tune limits only when needed.
 
 - ZIP, CBZ, EPUB, DOCX, PPTX, XLSX: safe container recompression
 - PDF: lossless cleanup with PyMuPDF when available
 - JPG, JPEG, PNG, WEBP, BMP, TIFF: optional image recompression
 - ZIP/CBZ/EPUB/Office containers: format-preserving image entry optimization when useful
+- Generic files: verified `.ozero.zip` fallback when no format-specific optimizer exists
 - Analyze folders by type, size, and optional validity
 - Find byte-identical duplicate files before optimizing
-- Batch limits for huge files, minimum saving percentage, target size, quality, and loss budget
+- Simple goals for Smart, Quality, or Smallest output
+- Local worker parallelism for multi-file desktop jobs
+- Batch limits for huge files, minimum saving percentage, and target size
 - Original files are preserved by default
 - Output is accepted only when it verifies and is smaller
 
@@ -22,9 +25,9 @@ python -m optimizerzero analyze "D:\Files" --recursive --verify
 python -m optimizerzero duplicates "D:\Files" --recursive
 python -m optimizerzero verify "D:\Files" --recursive
 python -m optimizerzero optimize "D:\Files\book.cbz"
-python -m optimizerzero optimize "D:\Files" --recursive --profile balanced --min-savings-percent 1
-python -m optimizerzero optimize "D:\Photos" --recursive --loss-budget low --quality 88
-python -m optimizerzero optimize "D:\Photos" --recursive --loss-budget high --target-size 5MB
+python -m optimizerzero optimize "D:\Files" --recursive --goal smart
+python -m optimizerzero optimize "D:\Photos" --recursive --goal quality
+python -m optimizerzero optimize "D:\Photos" --recursive --goal smallest --target-size 5MB
 python -m optimizerzero optimize "D:\Files" --recursive --max-size 150MB --dry-run --report report.json
 python -m optimizerzero gui
 ```
@@ -47,6 +50,14 @@ Windows shortcut style:
 
 ## User-Controlled Compression
 
+Use goals first:
+
+- `--goal smart`: recommended default; good savings with low visual risk.
+- `--goal quality`: preserve quality; skip tiny wins.
+- `--goal smallest`: stronger compression; review outputs before replacing originals.
+
+Tune only when needed:
+
 - `--loss-budget none`: do not use lossy image recompression.
 - `--loss-budget low`: near-original image quality.
 - `--loss-budget medium`: smaller files with visible-quality tradeoff.
@@ -55,6 +66,8 @@ Windows shortcut style:
 - `--target-size 5MB`: keep only outputs that fit the target.
 - `--min-savings-percent 1`: skip tiny wins.
 - `--max-size 150MB`: avoid heavy files in mixed folders.
+- `--workers 4`: use local CPU workers for multi-file jobs. Omit it for the safe automatic default.
+- `--supported-only`: skip generic `.ozero.zip` fallback.
 
 OptimizerZero preserves image file formats in archives. The Web Lite app converts standalone images to WebP only when lossy compression is allowed.
 
@@ -63,6 +76,8 @@ OptimizerZero preserves image file formats in archives. The Web Lite app convert
 - `safe`: container/PDF cleanup and lossless image cleanup only.
 - `balanced`: conservative image recompression.
 - `strong`: stronger image recompression. Use after checking visual quality.
+
+Most users should use goals instead of profiles.
 
 ## Web Lite
 

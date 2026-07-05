@@ -4,10 +4,10 @@
 
 OptimizerZero is a local-first compression assistant.
 
-- broader input scope: archives, document containers, PDFs, images
+- broader input scope: archives, document containers, PDFs, images, generic files
 - safety-first defaults: preserve originals, verify outputs, skip larger results
 - practical preflight: analyze folders, find duplicates, cap huge files before processing
-- user-controlled compression: loss budget, image quality, target size, and minimum savings
+- user-controlled compression: simple goals first, advanced target size and minimum savings when needed
 - public-ready wording: no piracy/downloader framing
 
 ## Current Engine
@@ -17,6 +17,8 @@ OptimizerZero is a local-first compression assistant.
 - DOCX/PPTX/XLSX: ZIP container recompression only
 - PDF: PyMuPDF lossless cleanup, deflate, garbage collection, page-count verification
 - Images: PNG lossless optimization; JPEG/WEBP quality control when lossy compression is allowed
+- Generic files: fallback to verified `.ozero.zip` when no format-specific optimizer exists
+- Multi-file jobs: use local CPU workers for parallel desktop processing
 - Analyze: summarize supported files by kind, size, and optional validity
 - Duplicates: SHA-256 identical-file grouping for supported file types
 
@@ -34,12 +36,12 @@ Implemented for v0.1.0:
 - synthetic public demo assets
 - release zip SHA256 generation
 - release verification script
-- optional PDF dependency split
+- PDF support in the default Windows build, with a lite build option
 - output-name collision avoidance
 - Netlify-ready Web Lite app
 - PWA cache and installable Web Lite shell
-- purpose presets for archive/share/messenger/email/quality-first use
+- simplified goals: smart, quality, smallest
 - `analyze` and `duplicates` CLI commands
-- loss budget, quality, target-size, min-saving, and max-size controls
-- GUI analysis and user-centered compression controls
+- smart defaults plus target-size, min-saving, max-size, and worker controls
+- GUI analysis, simplified goals, and local multi-worker compression
 - cleanup script for Python caches, demo outputs, and optional build artifacts

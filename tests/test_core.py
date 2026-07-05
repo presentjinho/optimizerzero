@@ -9,11 +9,14 @@ from PIL import Image
 from optimizerzero.core import (
     OptimizeOptions,
     LossBudget,
+    Goal,
     Profile,
     analyze_files,
     discover_files,
     find_duplicate_files,
+    merge_goal_options,
     move_file,
+    optimize_many,
     optimize_one,
     parse_size,
     planned_output_path,
@@ -143,8 +146,9 @@ class CoreTests(unittest.TestCase):
             build.mkdir()
             (build / "ignored.zip").write_bytes(b"ignored")
 
-            self.assertEqual([p.name for p in discover_files([tmp_path], recursive=False)], ["b.zip"])
-            self.assertEqual({p.name for p in discover_files([tmp_path], recursive=True)}, {"b.zip", "c.pdf"})
+            self.assertEqual([p.name for p in discover_files([tmp_path], recursive=False)], ["a.txt", "b.zip"])
+            self.assertEqual({p.name for p in discover_files([tmp_path], recursive=True)}, {"a.txt", "b.zip", "c.pdf"})
+            self.assertEqual([p.name for p in discover_files([tmp_path], recursive=False, generic_fallback=False)], ["b.zip"])
 
     def test_planned_output_does_not_overwrite_existing_output(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -157,6 +161,41 @@ class CoreTests(unittest.TestCase):
             output = planned_output_path(source, OptimizeOptions())
 
             self.assertEqual(output.name, "sample.ozero-2.zip")
+
+    def test_generic_file_is_zipped_as_fallback(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "notes.txt"
+            source.write_text("hello\n" * 1000, encoding="utf-8")
+
+            result = optimize_one(source, OptimizeOptions())
+
+            self.assertEqual(result.status, "optimized")
+            self.assertTrue(result.output.endswith(".ozero.zip"))
+            with zipfile.ZipFile(result.output) as archive:
+                self.assertEqual(archive.namelist(), ["notes.txt"])
+                self.assertEqual(archive.read("notes.txt"), source.read_bytes())
+
+    def test_goal_smart_sets_practical_defaults(self):
+        options = merge_goal_options(Goal.SMART)
+
+        self.assertEqual(options.profile, Profile.BALANCED)
+        self.assertEqual(options.loss_budget, LossBudget.LOW)
+        self.assertEqual(options.image_quality, 88)
+        self.assertEqual(options.min_savings_percent, 1.0)
+
+    def test_optimize_many_keeps_input_order_with_workers(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            first = tmp_path / "a.txt"
+            second = tmp_path / "b.txt"
+            first.write_text("a" * 5000, encoding="utf-8")
+            second.write_text("b" * 5000, encoding="utf-8")
+
+            results = optimize_many([first, second], OptimizeOptions(workers=2))
+
+            self.assertEqual([Path(result.source).name for result in results], ["a.txt", "b.txt"])
+            self.assertTrue(all(result.status == "optimized" for result in results))
 
     def test_move_file_handles_replace(self):
         with tempfile.TemporaryDirectory() as raw:

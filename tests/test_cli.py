@@ -67,6 +67,32 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertIn("archive: 1 files", out.getvalue())
 
+    def test_scan_includes_generic_fallback_by_default(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "notes.txt"
+            source.write_text("hello", encoding="utf-8")
+            out = io.StringIO()
+
+            with redirect_stdout(out):
+                code = main(["scan", str(tmp_path)])
+
+            self.assertEqual(code, 0)
+            self.assertIn("notes.txt", out.getvalue())
+
+    def test_optimize_uses_goal_and_workers(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "notes.txt"
+            source.write_text("hello\n" * 1000, encoding="utf-8")
+            out = io.StringIO()
+
+            with redirect_stdout(out):
+                code = main(["optimize", str(source), "--goal", "smart", "--workers", "2"])
+
+            self.assertEqual(code, 0)
+            self.assertIn("optimized: notes.txt", out.getvalue())
+
     def test_duplicates_reports_group(self):
         with tempfile.TemporaryDirectory() as raw:
             tmp_path = Path(raw)

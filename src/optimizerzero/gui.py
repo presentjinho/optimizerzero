@@ -3,10 +3,16 @@ from __future__ import annotations
 import queue
 import threading
 import tkinter as tk
+import os
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .core import LossBudget, OptimizeOptions, OptimizeResult, Profile, analyze_files, discover_files, format_bytes, optimize_one, parse_size, write_report
+from .core import Goal, OptimizeOptions, OptimizeResult, analyze_files, discover_files, format_bytes, merge_goal_options, optimize_many, parse_size, write_report
+
+
+def default_workers() -> int:
+    cpu_count = os.cpu_count() or 2
+    return max(1, min(4, cpu_count - 1 if cpu_count > 1 else 1))
 
 
 class OptimizerZeroApp(tk.Tk):
@@ -29,7 +35,7 @@ class OptimizerZeroApp(tk.Tk):
         header = tk.Frame(self, bg="#101418")
         header.pack(fill="x", padx=18, pady=(16, 8))
         tk.Label(header, text="OptimizerZero", fg="#f4f7fb", bg="#101418", font=("Segoe UI", 22, "bold")).pack(anchor="w")
-        tk.Label(header, text="Choose how much size to save and how much quality to trade.", fg="#9fb0c0", bg="#101418").pack(anchor="w")
+        tk.Label(header, text="Smart local compression. Files stay on this PC.", fg="#9fb0c0", bg="#101418").pack(anchor="w")
         actions = tk.Frame(self, bg="#101418")
         actions.pack(fill="x", padx=18, pady=8)
         self.add_files_button = ttk.Button(actions, text="Add Files", command=self.add_files)
@@ -42,12 +48,9 @@ class OptimizerZeroApp(tk.Tk):
         self.clear_button.pack(side="left", padx=(0, 8))
         self.report_button = ttk.Button(actions, text="Save Report", command=self.save_report)
         self.report_button.pack(side="left", padx=(0, 18))
-        tk.Label(actions, text="Profile", fg="#d7dee7", bg="#101418").pack(side="left")
-        self.profile_var = tk.StringVar(value=Profile.SAFE.value)
-        ttk.Combobox(actions, textvariable=self.profile_var, values=[p.value for p in Profile], width=10, state="readonly").pack(side="left", padx=8)
-        tk.Label(actions, text="Loss", fg="#d7dee7", bg="#101418").pack(side="left")
-        self.loss_budget_var = tk.StringVar(value="")
-        ttk.Combobox(actions, textvariable=self.loss_budget_var, values=[""] + [budget.value for budget in LossBudget], width=8, state="readonly").pack(side="left", padx=8)
+        tk.Label(actions, text="Goal", fg="#d7dee7", bg="#101418").pack(side="left")
+        self.goal_var = tk.StringVar(value=Goal.SMART.value)
+        ttk.Combobox(actions, textvariable=self.goal_var, values=[goal.value for goal in Goal], width=10, state="readonly").pack(side="left", padx=8)
         self.recursive_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(actions, text="Recursive", variable=self.recursive_var).pack(side="left", padx=8)
         self.dry_run_var = tk.BooleanVar(value=False)
@@ -58,8 +61,8 @@ class OptimizerZeroApp(tk.Tk):
         limits.pack(fill="x", padx=18, pady=(0, 8))
         self.min_savings_var = self._entry(limits, "Min savings %", "0", 8)
         self.max_size_var = self._entry(limits, "Max size", "", 10)
-        self.quality_var = self._entry(limits, "Quality", "", 6)
         self.target_size_var = self._entry(limits, "Target", "", 10)
+        self.workers_var = self._entry(limits, "Workers", "auto", 8)
         self.summary_var = tk.StringVar(value="0 files / 0 B saved")
         tk.Label(limits, textvariable=self.summary_var, fg="#9fb0c0", bg="#101418").pack(side="right")
         cols = ("file", "type", "size", "status", "saved")
@@ -136,20 +139,20 @@ class OptimizerZeroApp(tk.Tk):
         try:
             min_savings = float(self.min_savings_var.get() or "0")
             max_size = parse_size(self.max_size_var.get())
-            quality = int(self.quality_var.get()) if self.quality_var.get().strip() else None
             target_size = parse_size(self.target_size_var.get())
+            workers_text = self.workers_var.get().strip().lower()
+            workers = default_workers() if workers_text in {"", "auto"} else int(workers_text)
         except ValueError:
-            messagebox.showerror("Invalid limit", "Use a number, quality 1-100, 75MB, or 2GB.")
+            messagebox.showerror("Invalid limit", "Use a number, auto, 75MB, or 2GB.")
             return
-        options = OptimizeOptions(
-            profile=Profile(self.profile_var.get()),
+        options = merge_goal_options(
+            Goal(self.goal_var.get()),
             recursive=self.recursive_var.get(),
             dry_run=self.dry_run_var.get(),
             min_savings_percent=min_savings,
             max_size_bytes=max_size,
-            loss_budget=LossBudget(self.loss_budget_var.get()) if self.loss_budget_var.get() else None,
-            image_quality=quality,
             target_size_bytes=target_size,
+            workers=workers,
         )
         files_snapshot = list(self.files)
         self.results = []
@@ -161,7 +164,8 @@ class OptimizerZeroApp(tk.Tk):
     def _run_worker(self, files: list[Path], options: OptimizeOptions) -> None:
         for path in files:
             self.events.put(("status", (path, "running", "-")))
-            result = optimize_one(path, options)
+        for result in optimize_many(files, options):
+            path = Path(result.source)
             self.events.put(("status", (path, result.message, format_bytes(max(0, result.saved_bytes)))))
             self.events.put(("log", f"{result.status}: {path.name} | {result.message}"))
             self.events.put(("result", result))
