@@ -1,14 +1,25 @@
 /*
-  Content-Type: text/html; charset=utf-8
   X-Robots-Tag: noindex, nofollow, noarchive
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   Permissions-Policy: camera=(), microphone=(), geolocation=()
 
+/
+  Content-Type: text/html; charset=utf-8
+
+/index.html
+  Content-Type: text/html; charset=utf-8
+
 /styles.css
   Content-Type: text/css; charset=utf-8
 
 /app.js
+  Content-Type: application/javascript; charset=utf-8
+
+/vendor/jszip.min.js
+  Content-Type: application/javascript; charset=utf-8
+
+/vendor/pdf-lib.min.js
   Content-Type: application/javascript; charset=utf-8
 
 /README.md

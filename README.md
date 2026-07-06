@@ -7,7 +7,7 @@ Static browser version for Netlify-style sharing.
 - ZIP/CBZ/EPUB/DOCX/PPTX/XLSX/ODT/ODS/ODP/JAR recompression with JSZip
 - JPG/JPEG/WEBP recompression inside ZIP/CBZ when visual loss is allowed
 - PNG/JPG/WEBP browser-side image recompression
-- PDF web safe ZIP fallback when browser-side PDF rewriting is not available
+- PDF browser-side rewrite to `.ozero.pdf` with pdf-lib when it makes the file smaller
 - Generic-file `.ozero.zip` fallback when a format-specific optimizer is not available
 - Loss budget and quality control for standalone image conversion
 - Per-file target size and minimum-savings controls
@@ -18,14 +18,14 @@ Static browser version for Netlify-style sharing.
 - Download JSON report
 - Rejected-file feedback and total saved percentage
 - No server upload
-- JSZip is vendored locally under `vendor/`, so the app does not need an external CDN after deploy
+- JSZip and pdf-lib are vendored locally under `vendor/`, so the app does not need an external CDN after deploy
 
 See `PRIVACY.md` for the local-processing/privacy note.
 
 ## Limits
 
 - Large files depend on browser memory.
-- PDF cleanup and real PDF rewriting are desktop/Python only.
+- Deep PDF cleanup is still better in the desktop/Python app.
 - Encrypted archives are not supported.
 - Browser image conversion uses WebP output for standalone images.
 - Archive image recompression is limited to ZIP/CBZ JPG/JPEG/WEBP entries.
