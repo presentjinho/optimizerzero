@@ -376,16 +376,54 @@ async function optimizeGenericFile(file) {
   return { status: "optimized", blob, outName, saved: accepted.saved, message: "generic ZIP fallback" };
 }
 
+const RECOMPRESSABLE_PDF_COLORSPACES = new Set(["DeviceRGB", "DeviceGray"]);
+
+async function recompressPdfImages(pdfDoc) {
+  if (lossBudget() === "none") return 0;
+  const { PDFName, PDFRawStream, PDFNumber } = window.PDFLib;
+  const subtypeImage = PDFName.of("Image");
+  const filterDct = PDFName.of("DCTDecode");
+  let recompressedCount = 0;
+  for (const [ref, obj] of pdfDoc.context.enumerateIndirectObjects()) {
+    if (!(obj instanceof PDFRawStream)) continue;
+    const dict = obj.dict;
+    if (dict.lookup(PDFName.of("Subtype")) !== subtypeImage) continue;
+    if (dict.lookup(PDFName.of("Filter")) !== filterDct) continue;
+    if (dict.lookup(PDFName.of("Decode"))) continue;
+    const colorSpace = dict.lookup(PDFName.of("ColorSpace"));
+    if (!(colorSpace instanceof PDFName) || !RECOMPRESSABLE_PDF_COLORSPACES.has(colorSpace.asString().slice(1))) continue;
+    const sourceBytes = obj.getContents();
+    let recompressedBlob;
+    try {
+      recompressedBlob = await recompressImage(new Blob([sourceBytes], { type: "image/jpeg" }), "image/jpeg");
+    } catch {
+      continue;
+    }
+    if (!recompressedBlob || recompressedBlob.size >= sourceBytes.byteLength) continue;
+    const newBytes = new Uint8Array(await recompressedBlob.arrayBuffer());
+    dict.set(PDFName.of("Length"), PDFNumber.of(newBytes.length));
+    pdfDoc.context.assign(ref, PDFRawStream.of(dict, newBytes));
+    recompressedCount += 1;
+  }
+  return recompressedCount;
+}
+
 async function optimizePdfFile(file) {
   if (!window.PDFLib?.PDFDocument) throw new Error("PDF engine unavailable.");
   const sourceBytes = await file.arrayBuffer();
-  const document = await PDFLib.PDFDocument.load(sourceBytes, {
-    ignoreEncryption: false,
-    updateMetadata: false,
-  });
-  const pageCount = document.getPageCount();
+  let pdfDoc;
+  try {
+    pdfDoc = await PDFLib.PDFDocument.load(sourceBytes, {
+      ignoreEncryption: false,
+      updateMetadata: false,
+    });
+  } catch {
+    throw new Error("PDF could not be read (encrypted or corrupt).");
+  }
+  const pageCount = pdfDoc.getPageCount();
   if (pageCount <= 0) return { status: "skipped", message: "PDF has no pages" };
-  const outputBytes = await document.save({
+  const recompressedImages = await recompressPdfImages(pdfDoc);
+  const outputBytes = await pdfDoc.save({
     useObjectStreams: true,
     addDefaultPage: false,
     objectsPerTick: 100,
@@ -393,11 +431,12 @@ async function optimizePdfFile(file) {
   });
   const blob = new Blob([outputBytes], { type: "application/pdf" });
   const accepted = outputAccepted(file.size, blob.size);
+  const detail = recompressedImages ? `${pageCount} pages / ${recompressedImages} images recompressed` : `${pageCount} pages`;
   if (!accepted.ok) {
-    return { status: "skipped", message: `PDF rewrite ${accepted.message}` };
+    return { status: "skipped", message: `PDF rewrite ${accepted.message} (${detail})` };
   }
   const outName = file.name.replace(/(\.[^.]+)?$/, ".ozero.pdf");
-  return { status: "optimized", blob, outName, saved: accepted.saved, message: `PDF rewritten / ${pageCount} pages` };
+  return { status: "optimized", blob, outName, saved: accepted.saved, message: `PDF rewritten / ${detail}` };
 }
 
 async function optimizeFile(file) {
