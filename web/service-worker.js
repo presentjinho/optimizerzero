@@ -1,4 +1,4 @@
-const CACHE_NAME = "optimizerzero-web-lite-v6";
+const CACHE_NAME = "optimizerzero-web-lite-v7";
 const APP_ASSETS = [
   "./",
   "./index.html",
@@ -9,6 +9,7 @@ const APP_ASSETS = [
   "./manifest.webmanifest",
   "./icon.svg",
   "./vendor/jszip.min.js",
+  "./vendor/pdf-lib.min.js",
 ];
 
 self.addEventListener("install", (event) => {

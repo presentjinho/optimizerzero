@@ -102,7 +102,9 @@ if (Test-Path -LiteralPath $WebZip) {
     "robots.txt",
     "_headers",
     "vendor/jszip.min.js",
-    "vendor/JSZIP_LICENSE.markdown"
+    "vendor/JSZIP_LICENSE.markdown",
+    "vendor/pdf-lib.min.js",
+    "vendor/PDF_LIB_LICENSE.md"
   )
   $entries = (tar -tf $WebZip) | ForEach-Object { $_.TrimStart("./") }
   foreach ($entry in $requiredWebEntries) {

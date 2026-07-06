@@ -106,10 +106,11 @@ class WebAssetTests(unittest.TestCase):
             "./manifest.webmanifest",
             "./icon.svg",
             "./vendor/jszip.min.js",
+            "./vendor/pdf-lib.min.js",
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v6', worker)
+        self.assertIn('optimizerzero-web-lite-v7', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")
@@ -117,24 +118,29 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("Content-Type: text/html; charset=utf-8", headers)
         self.assertIn("Content-Type: text/css; charset=utf-8", headers)
         self.assertIn("Content-Type: application/javascript; charset=utf-8", headers)
+        self.assertIn("/vendor/jszip.min.js", headers)
+        self.assertIn("/vendor/pdf-lib.min.js", headers)
         self.assertIn("Content-Type: text/markdown; charset=utf-8", headers)
 
-    def test_web_uses_local_jszip_vendor_file(self):
+    def test_web_uses_local_vendor_files(self):
         html = self.read("index.html")
         worker = self.read("service-worker.js")
 
         self.assertIn("./vendor/jszip.min.js", html)
+        self.assertIn("./vendor/pdf-lib.min.js", html)
         self.assertIn("./vendor/jszip.min.js", worker)
+        self.assertIn("./vendor/pdf-lib.min.js", worker)
         self.assertNotIn("cdn.jsdelivr.net", html)
         self.assertNotIn("cdn.jsdelivr.net", worker)
         self.assertTrue((WEB / "vendor" / "JSZIP_LICENSE.markdown").exists())
+        self.assertTrue((WEB / "vendor" / "PDF_LIB_LICENSE.md").exists())
 
     def test_privacy_note_matches_local_first_claims(self):
         privacy = self.read("PRIVACY.md")
 
         self.assertIn("not uploaded", privacy)
         self.assertIn("does not include analytics", privacy)
-        self.assertIn("JSZip is bundled", privacy)
+        self.assertIn("JSZip and pdf-lib are bundled", privacy)
 
     def test_local_first_architecture_doc_matches_no_server_data_decision(self):
         doc = (ROOT / "docs" / "LOCAL_FIRST_ARCHITECTURE_KO.md").read_text(encoding="utf-8")
@@ -170,6 +176,8 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("$tempWebZipPath", script)
         self.assertIn("Compress-Archive -Path $webFiles.FullName -DestinationPath $tempWebZipPath", script)
         self.assertIn("tar -tf $tempWebZipPath", script)
+        self.assertIn("vendor/pdf-lib.min.js", script)
+        self.assertIn("vendor/PDF_LIB_LICENSE.md", script)
         self.assertIn("Move-Item -LiteralPath $tempWebZipPath -Destination $webZipPath", script)
         self.assertIn("finally", script)
 
@@ -195,6 +203,8 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn('-Role "windows-app"', script)
         self.assertIn("sha256 = $Sha256", script)
         self.assertIn("function Test-Manifest", script)
+        self.assertIn("vendor/pdf-lib.min.js", script)
+        self.assertIn("vendor/PDF_LIB_LICENSE.md", script)
         self.assertIn("Manifest SHA256 mismatch", script)
         self.assertIn("Test-Manifest -ManifestPath $manifestPath", script)
 
@@ -240,10 +250,10 @@ class WebAssetTests(unittest.TestCase):
         app = self.read("app.js")
 
         self.assertIn("dependencyStatus", app)
-        self.assertIn("archive engine ready", app)
-        self.assertIn("image-only / archive engine unavailable", app)
+        self.assertIn("archive ready", app)
+        self.assertIn("PDF ready", app)
         self.assertIn("Archive engine unavailable. Standalone images still work.", app)
-        self.assertIn("archive engine unavailable", app)
+        self.assertIn("PDF engine unavailable.", app)
 
     def test_web_recompresses_images_inside_supported_containers(self):
         app = self.read("app.js")
@@ -279,9 +289,11 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("pdf", html)
         self.assertIn('const pdfExts = new Set(["pdf"])', app)
         self.assertIn("async function optimizePdfFile(file)", app)
-        self.assertIn("PDF web safe ZIP", app)
-        self.assertIn("Windows PDF app", app)
-        self.assertIn("PDF cleanup and real PDF rewriting are desktop/Python only.", readme)
+        self.assertIn("PDFLib.PDFDocument.load", app)
+        self.assertIn("useObjectStreams: true", app)
+        self.assertIn(".ozero.pdf", app)
+        self.assertNotIn("PDF web safe ZIP", app)
+        self.assertIn("PDF browser-side rewrite", readme)
 
     def test_web_javascript_syntax(self):
         for script in ("app.js", "service-worker.js"):

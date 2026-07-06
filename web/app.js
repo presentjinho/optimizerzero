@@ -264,7 +264,9 @@ function setAppStatus(text) {
 }
 
 function dependencyStatus() {
-  return window.JSZip ? "archive engine ready" : "image-only / archive engine unavailable";
+  const archive = window.JSZip ? "archive ready" : "archive unavailable";
+  const pdf = window.PDFLib ? "PDF ready" : "PDF unavailable";
+  return `${archive} / ${pdf}`;
 }
 
 function refreshAppStatus() {
@@ -375,15 +377,27 @@ async function optimizeGenericFile(file) {
 }
 
 async function optimizePdfFile(file) {
-  if (!window.JSZip) throw new Error("PDF web mode needs the archive engine.");
-  const result = await optimizeGenericFile(file);
-  if (result.status === "optimized") {
-    return { ...result, message: "PDF web safe ZIP" };
+  if (!window.PDFLib?.PDFDocument) throw new Error("PDF engine unavailable.");
+  const sourceBytes = await file.arrayBuffer();
+  const document = await PDFLib.PDFDocument.load(sourceBytes, {
+    ignoreEncryption: false,
+    updateMetadata: false,
+  });
+  const pageCount = document.getPageCount();
+  if (pageCount <= 0) return { status: "skipped", message: "PDF has no pages" };
+  const outputBytes = await document.save({
+    useObjectStreams: true,
+    addDefaultPage: false,
+    objectsPerTick: 100,
+    updateFieldAppearances: false,
+  });
+  const blob = new Blob([outputBytes], { type: "application/pdf" });
+  const accepted = outputAccepted(file.size, blob.size);
+  if (!accepted.ok) {
+    return { status: "skipped", message: `PDF rewrite ${accepted.message}` };
   }
-  return {
-    status: "skipped",
-    message: `PDF web ZIP not useful: ${result.message}. Use the Windows PDF app for real PDF cleanup.`,
-  };
+  const outName = file.name.replace(/(\.[^.]+)?$/, ".ozero.pdf");
+  return { status: "optimized", blob, outName, saved: accepted.saved, message: `PDF rewritten / ${pageCount} pages` };
 }
 
 async function optimizeFile(file) {

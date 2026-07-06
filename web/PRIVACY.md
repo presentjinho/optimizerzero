@@ -7,7 +7,7 @@ OptimizerZero Web Lite is designed to run locally in your browser.
 - Selected files are processed in the browser.
 - Files are not uploaded to an OptimizerZero server.
 - The app does not include analytics, tracking pixels, or remote logging.
-- JSZip is bundled in `vendor/`, so archive support does not require a CDN after deploy.
+- JSZip and pdf-lib are bundled in `vendor/`, so archive and PDF support do not require a CDN after deploy.
 - Reports are generated only when you click the report button.
 
 ## Browser Storage
