@@ -449,6 +449,9 @@ function runWithWorkerPool(files, opts, onDone, workerScript = "./worker.js", wo
         dispatchNext(worker);
       };
       worker.onmessage = (event) => {
+        // pdf.js internals loaded inside the worker can emit their own
+        // handshake messages (targetName: "main") -- not pool protocol.
+        if (event.data && event.data.targetName) return;
         const { ok, result, error } = event.data;
         if (ok) {
           recordResult(file, result);
