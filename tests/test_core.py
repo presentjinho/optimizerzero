@@ -327,6 +327,45 @@ class CoreTests(unittest.TestCase):
             ok, message = validate_file(Path(result.output))
             self.assertTrue(ok, message)
 
+    def test_pdf_optimizer_recompresses_embedded_jpeg_images_when_loss_allowed(self):
+        try:
+            import pikepdf
+        except Exception:
+            self.skipTest("pikepdf is not installed")
+
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "scan.pdf"
+
+            jpeg_buffer = io.BytesIO()
+            Image.new("RGB", (800, 600), color=(120, 140, 160)).save(jpeg_buffer, format="JPEG", quality=97)
+            jpeg_bytes = jpeg_buffer.getvalue()
+
+            pdf = pikepdf.Pdf.new()
+            page = pdf.add_blank_page(page_size=(612, 792))
+            image_obj = pikepdf.Stream(pdf, jpeg_bytes)
+            image_obj.Type = pikepdf.Name("/XObject")
+            image_obj.Subtype = pikepdf.Name("/Image")
+            image_obj.Width = 800
+            image_obj.Height = 600
+            image_obj.BitsPerComponent = 8
+            image_obj.ColorSpace = pikepdf.Name("/DeviceRGB")
+            image_obj.Filter = pikepdf.Name("/DCTDecode")
+            page.Resources = pikepdf.Dictionary(XObject=pikepdf.Dictionary(Im0=image_obj))
+            page.Contents = pikepdf.Stream(pdf, b"q 612 0 0 792 0 0 cm /Im0 Do Q")
+            pdf.save(str(source))
+            pdf.close()
+
+            quality_result = optimize_one(source, merge_goal_options(Goal.QUALITY, allow_larger=True))
+            self.assertNotIn("image", quality_result.message)
+
+            smallest_result = optimize_one(source, merge_goal_options(Goal.SMALLEST, allow_larger=True))
+            self.assertEqual(smallest_result.status, "optimized")
+            self.assertIn("image", smallest_result.message)
+            self.assertLess(smallest_result.output_size, source.stat().st_size)
+            ok, message = validate_file(Path(smallest_result.output))
+            self.assertTrue(ok, message)
+
 
 if __name__ == "__main__":
     unittest.main()

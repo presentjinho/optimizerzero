@@ -176,6 +176,13 @@ def clamp_quality(value: int) -> int:
     return max(1, min(100, value))
 
 
+def short_message(text: str, limit: int = 140) -> str:
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
+
+
 def effective_loss_budget(options: OptimizeOptions) -> LossBudget:
     if options.loss_budget is not None:
         return options.loss_budget
@@ -387,7 +394,7 @@ def validate_file(path: Path) -> tuple[bool, str]:
                 errors.append(f"pikepdf: {exc}")
         except Exception:
             errors.append("pikepdf is not available")
-        return False, "; ".join(errors)
+        return False, short_message("; ".join(errors))
     return True, "generic file"
 
 
@@ -441,7 +448,7 @@ def optimize_image_bytes(data: bytes, options: OptimizeOptions, target_size_byte
 
 def optimize_zip_container(source: Path, target: Path, options: OptimizeOptions) -> tuple[bool, str]:
     expected_names: set[str] = set()
-    with zipfile.ZipFile(source, "r") as zin, zipfile.ZipFile(target, "w") as zout:
+    with zipfile.ZipFile(source, "r") as zin, zipfile.ZipFile(target, "w", compresslevel=9) as zout:
         infos = zin.infolist()
         if any(info.flag_bits & 0x1 for info in infos):
             return False, "encrypted ZIP entries are not supported"
@@ -494,8 +501,66 @@ def optimize_tar_container(source: Path, target: Path) -> tuple[bool, str]:
     return validate_tar(target, expected_names)
 
 
-def optimize_pdf(source: Path, target: Path) -> tuple[bool, str]:
-    candidates: list[tuple[Path, str]] = []
+def _pdf_colorspace_is_recompressable(colorspace) -> bool:
+    import pikepdf
+
+    try:
+        if colorspace is None:
+            return False
+        if isinstance(colorspace, pikepdf.Name):
+            return str(colorspace) in {"/DeviceRGB", "/DeviceGray"}
+        if isinstance(colorspace, pikepdf.Array) and len(colorspace) >= 2 and str(colorspace[0]) == "/ICCBased":
+            icc_stream = colorspace[1]
+            alternate = icc_stream.get("/Alternate") if hasattr(icc_stream, "get") else None
+            if alternate is not None:
+                return str(alternate) in {"/DeviceRGB", "/DeviceGray"}
+            components = icc_stream.get("/N") if hasattr(icc_stream, "get") else None
+            return int(components) in {1, 3} if components is not None else False
+    except Exception:
+        return False
+    return False
+
+
+def recompress_pdf_images(document, options: OptimizeOptions) -> int:
+    """Lossy-recompress embedded JPEG (DCTDecode) images in a pikepdf document in place.
+
+    Mirrors the web app's recompressPdfImages, but can also see through the
+    common ICCBased-wrapped DeviceRGB/DeviceGray colorspace that pdf-lib
+    can't safely introspect in the browser.
+    """
+    import pikepdf
+
+    qualities = quality_ladder(options)
+    if not qualities:
+        return 0
+    recompressed = 0
+    for obj in document.objects:
+        try:
+            if not obj.get("/Subtype") == pikepdf.Name("/Image"):
+                continue
+            if obj.get("/Filter") != pikepdf.Name("/DCTDecode"):
+                continue
+            if obj.get("/Decode") is not None:
+                continue
+            if not _pdf_colorspace_is_recompressable(obj.get("/ColorSpace")):
+                continue
+            raw = bytes(obj.read_raw_bytes())
+            optimized = optimize_image_bytes(raw, options)
+            if not optimized or len(optimized) >= len(raw):
+                continue
+            with Image.open(io.BytesIO(optimized)) as check:
+                if (check.format or "").upper() != "JPEG":
+                    continue
+            obj.write(optimized, filter=pikepdf.Name("/DCTDecode"))
+            recompressed += 1
+        except Exception:
+            continue
+    return recompressed
+
+
+def optimize_pdf(source: Path, target: Path, options: OptimizeOptions | None = None) -> tuple[bool, str]:
+    options = options or OptimizeOptions()
+    candidates: list[tuple[Path, str, int]] = []
     errors: list[str] = []
     with tempfile.TemporaryDirectory(prefix="optimizerzero_pdf_") as temp_dir_raw:
         temp_dir = Path(temp_dir_raw)
@@ -517,7 +582,7 @@ def optimize_pdf(source: Path, target: Path) -> tuple[bool, str]:
             with fitz.open(str(fitz_candidate)) as verified:
                 if verified.page_count != page_count:
                     raise ValueError("PDF page count changed")
-            candidates.append((fitz_candidate, "PyMuPDF"))
+            candidates.append((fitz_candidate, "PyMuPDF", 0))
         except Exception as exc:
             errors.append(f"PyMuPDF: {exc}")
 
@@ -526,6 +591,7 @@ def optimize_pdf(source: Path, target: Path) -> tuple[bool, str]:
             pike_candidate = temp_dir / "pikepdf.pdf"
             with pikepdf.Pdf.open(str(source)) as document:
                 page_count = len(document.pages)
+                images_recompressed = recompress_pdf_images(document, options)
                 document.save(
                     str(pike_candidate),
                     compress_streams=True,
@@ -536,16 +602,19 @@ def optimize_pdf(source: Path, target: Path) -> tuple[bool, str]:
             with pikepdf.Pdf.open(str(pike_candidate)) as verified:
                 if len(verified.pages) != page_count:
                     raise ValueError("PDF page count changed")
-            candidates.append((pike_candidate, "pikepdf"))
+            candidates.append((pike_candidate, "pikepdf", images_recompressed))
         except Exception as exc:
             errors.append(f"pikepdf: {exc}")
 
         if not candidates:
-            return False, "; ".join(errors) if errors else "PDF optimizer is not available"
+            return False, short_message("; ".join(errors)) if errors else "PDF optimizer is not available"
 
-        best, engine = min(candidates, key=lambda item: item[0].stat().st_size)
+        best, engine, images_recompressed = min(candidates, key=lambda item: item[0].stat().st_size)
         shutil.copy2(best, target)
-    return True, f"PDF optimized with {engine}"
+    message = f"PDF optimized with {engine}"
+    if images_recompressed:
+        message += f" ({images_recompressed} image{'s' if images_recompressed != 1 else ''} recompressed)"
+    return True, message
 
 
 def optimize_generic_file(source: Path, target: Path) -> tuple[bool, str]:
@@ -634,7 +703,7 @@ def optimize_one(source: Path, options: OptimizeOptions) -> OptimizeResult:
             elif suffix in TAR_EXTS:
                 ok, message = optimize_tar_container(source, candidate)
             elif suffix in PDF_EXTS:
-                ok, message = optimize_pdf(source, candidate)
+                ok, message = optimize_pdf(source, candidate, options)
             elif suffix in IMAGE_EXTS:
                 ok, message = optimize_standalone_image(source, candidate, options)
             elif options.in_place:
@@ -644,7 +713,7 @@ def optimize_one(source: Path, options: OptimizeOptions) -> OptimizeResult:
             else:
                 ok, message = False, "unsupported file type"
         except Exception as exc:
-            ok, message = False, str(exc)
+            ok, message = False, short_message(str(exc))
         if not ok:
             if "not useful" in message:
                 return OptimizeResult(str(source), "skipped", message, original_size, original_size, 0)
