@@ -378,6 +378,9 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   object-fit: contain;
   background: #0b0d0c;
   pointer-events: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .preview-before-wrap {
   position: absolute;
