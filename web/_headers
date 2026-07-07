@@ -28,6 +28,12 @@
 /vendor/pdf-lib.min.js
   Content-Type: application/javascript; charset=utf-8
 
+/vendor/pdfjs/pdf.min.js
+  Content-Type: application/javascript; charset=utf-8
+
+/vendor/pdfjs/pdf.worker.min.js
+  Content-Type: application/javascript; charset=utf-8
+
 /README.md
   Content-Type: text/markdown; charset=utf-8
 

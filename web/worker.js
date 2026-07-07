@@ -1,7 +1,22 @@
 // One worker per pool slot. Loaded classic (not module) so the vendored
 // UMD builds and optimize-core.js attach their globals to this scope exactly
 // like they do to `window` on the main thread.
-importScripts("./vendor/jszip.min.js", "./vendor/pdf-lib.min.js", "./optimize-core.js");
+importScripts("./vendor/jszip.min.js", "./vendor/pdf-lib.min.js", "./vendor/pdfjs/pdf.min.js");
+
+// pdf.js cannot spawn its own nested worker from inside a worker, and its
+// fake-worker fallback needs `document` -- unless globalThis.pdfjsWorker
+// already exists. Loading pdf.worker.min.js into this same scope provides
+// that. Its load-time "ready" handshake posts to our parent though, which
+// would leak a junk message into the pool protocol -- swallow postMessage
+// for the duration of the import.
+{
+  const realPostMessage = self.postMessage.bind(self);
+  self.postMessage = () => {};
+  importScripts("./vendor/pdfjs/pdf.worker.min.js");
+  self.postMessage = realPostMessage;
+}
+
+importScripts("./optimize-core.js");
 
 self.onmessage = async (event) => {
   const { file, opts } = event.data;

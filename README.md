@@ -100,7 +100,8 @@ Most users should use goals instead of profiles.
 - optimized image results get a before/after slider preview (drag or arrow keys) to check quality before downloading
 - ZIP/CBZ/EPUB/Office containers can recompress JPG/JPEG/WEBP/BMP/GIF entries in the browser when visual loss is allowed
 - damaged or unsupported image entries inside containers are kept original instead of failing the whole job
-- PDF pages are rewritten with pdf-lib (cleanup + object streams), and embedded JPEG images are recompressed too when the loss budget allows it -- including the common real-world spellings (`/Filter [/DCTDecode]` arrays, ICCBased-wrapped RGB/gray colorspaces). Losslessly-stored (FlateDecode) page scans can't be rebuilt in the browser; the desktop app's PyMuPDF engine handles those
+- PDF pages are rewritten with pdf-lib (cleanup + object streams), and embedded JPEG images are recompressed too when the loss budget allows it -- including the common real-world spellings (`/Filter [/DCTDecode]` arrays, ICCBased-wrapped RGB/gray colorspaces)
+- at the 강력/최대 strength levels, PDFs additionally get a pdf.js-based scan reconstruction pass: every page is rendered and the file is rebuilt as JPEG page images, which reaches losslessly-stored (FlateDecode) scans, CCITT faxes, and over-DPI rasters that stream replacement can't touch. Text stops being selectable, so the result is only kept when genuinely smaller and the row says so explicitly
 - good for ZIP/CBZ/EPUB/Office containers, standalone images, and PDFs; very large folders are still better handled by the desktop app
 
 Deploy with `netlify.toml` or set the publish directory to `web`.

@@ -1,4 +1,4 @@
-const CACHE_NAME = "optimizerzero-web-lite-v19";
+const CACHE_NAME = "optimizerzero-web-lite-v20";
 const APP_ASSETS = [
   "./",
   "./index.html",
@@ -13,6 +13,8 @@ const APP_ASSETS = [
   "./icon.svg",
   "./vendor/jszip.min.js",
   "./vendor/pdf-lib.min.js",
+  "./vendor/pdfjs/pdf.min.js",
+  "./vendor/pdfjs/pdf.worker.min.js",
   "./vendor/jsquash-avif/avif_enc.js",
   "./vendor/jsquash-avif/avif_enc.wasm",
   "./vendor/jsquash-avif/encode.js",
@@ -26,7 +28,12 @@ const APP_ASSETS = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_ASSETS)));
+  // cache: "reload" bypasses the browser HTTP cache -- without it a new
+  // service worker version can faithfully re-cache STALE bytes the HTTP
+  // cache is still holding, and no amount of SW cache clearing fixes that.
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_ASSETS.map((url) => new Request(url, { cache: "reload" })))),
+  );
   self.skipWaiting();
 });
 

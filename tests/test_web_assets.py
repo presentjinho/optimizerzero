@@ -132,7 +132,7 @@ class WebAssetTests(unittest.TestCase):
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v19', worker)
+        self.assertIn('optimizerzero-web-lite-v20', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")
@@ -362,6 +362,35 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn('<option value="300">', html)
         self.assertIn('<option value="500">', html)
         self.assertIn('<option value="75" selected>', html)
+
+    def test_web_pdf_scan_reconstruction_via_pdfjs(self):
+        # Losslessly-stored (FlateDecode) page scans are what actually make
+        # PDFs big, and stream replacement can't reach them in the browser.
+        # pdf.js renders each page and the file is rebuilt as JPEG pages --
+        # gated on the "high" loss budget (text stops being selectable) and
+        # only kept when genuinely smaller.
+        core = self.read("optimize-core.js")
+        html = self.read("index.html")
+        worker = self.read("worker.js")
+        sw = self.read("service-worker.js")
+
+        self.assertTrue((WEB / "vendor" / "pdfjs" / "pdf.min.js").exists())
+        self.assertTrue((WEB / "vendor" / "pdfjs" / "pdf.worker.min.js").exists())
+        self.assertTrue((WEB / "vendor" / "pdfjs" / "PDFJS_LICENSE").exists())
+        self.assertIn("async function rasterizePdfDocument(", core)
+        self.assertIn('opts.lossBudget === "high"', core)
+        self.assertIn("스캔형 재구성", core)
+        self.assertIn('"./vendor/pdfjs/pdf.min.js"', html.replace("'", '"'))
+        # workers can't spawn pdf.js's nested worker and its fake-worker path
+        # needs `document` -- unless pdf.worker.min.js is imported into the
+        # same scope first. Its load-time handshake postMessage must be
+        # swallowed or it leaks junk into the pool protocol.
+        self.assertIn("./vendor/pdfjs/pdf.worker.min.js", worker)
+        self.assertIn("self.postMessage = () => {};", worker)
+        self.assertIn("./vendor/pdfjs/pdf.min.js", sw)
+        self.assertIn("./vendor/pdfjs/pdf.worker.min.js", sw)
+        # a new SW version must not re-cache stale bytes from the HTTP cache
+        self.assertIn('new Request(url, { cache: "reload" })', sw)
 
     def test_web_pdf_recompresses_common_real_world_image_variants(self):
         # Filter-array spelling and ICCBased-wrapped colorspaces are how most

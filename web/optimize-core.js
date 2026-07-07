@@ -396,6 +396,65 @@ async function recompressPdfImages(pdfDoc, opts) {
   return recompressedCount;
 }
 
+function pdfjsReady() {
+  if (typeof pdfjsLib === "undefined" || !pdfjsLib.getDocument) return false;
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc && !pdfjsLib.GlobalWorkerOptions.workerPort) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdfjs/pdf.worker.min.js";
+  }
+  return true;
+}
+
+// Render every page with pdf.js and rebuild the file as JPEG page images.
+// This is the only browser-side lever that reaches losslessly-stored
+// (FlateDecode) scans, CCITT faxes, and over-DPI rasters -- everything the
+// stream-replacement pass above can't touch. The trade is real: text stops
+// being selectable, so callers gate this on the "high" loss budget and only
+// keep the result when it's actually smaller.
+async function rasterizePdfDocument(sourceBytes, opts) {
+  if (!pdfjsReady()) return null;
+  const chasing = opts.targetSizeBytes && opts.targetSizeBytes > 0;
+  const dpis = chasing ? [150, 120, 96, 72] : [150];
+  const jpegQuality = Math.min(0.9, Math.max(0.35, opts.quality || 0.7));
+  // pdf.js transfers the buffer it's handed to its worker -- pass a copy so
+  // the caller's bytes stay usable.
+  const doc = await pdfjsLib.getDocument({ data: sourceBytes.slice(0), isEvalSupported: false }).promise;
+  try {
+    let best = null;
+    for (const dpi of dpis) {
+      const out = await PDFLib.PDFDocument.create();
+      for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
+        const page = await doc.getPage(pageNumber);
+        const baseViewport = page.getViewport({ scale: 1 });
+        const viewport = page.getViewport({ scale: dpi / 72 });
+        const width = Math.max(1, Math.floor(viewport.width));
+        const height = Math.max(1, Math.floor(viewport.height));
+        const useOffscreen = typeof document === "undefined" && typeof OffscreenCanvas !== "undefined";
+        const canvas = useOffscreen ? new OffscreenCanvas(width, height) : document.createElement("canvas");
+        if (!useOffscreen) {
+          canvas.width = width;
+          canvas.height = height;
+        }
+        const ctx = canvas.getContext("2d", { alpha: false });
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, width, height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const blob = useOffscreen
+          ? await canvas.convertToBlob({ type: "image/jpeg", quality: jpegQuality })
+          : await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", jpegQuality));
+        const jpg = await out.embedJpg(new Uint8Array(await blob.arrayBuffer()));
+        const outPage = out.addPage([baseViewport.width, baseViewport.height]);
+        outPage.drawImage(jpg, { x: 0, y: 0, width: baseViewport.width, height: baseViewport.height });
+      }
+      const bytes = await out.save({ useObjectStreams: true, addDefaultPage: false });
+      if (!best || bytes.length < best.bytes.length) best = { bytes, dpi, pageCount: doc.numPages };
+      if (!chasing || bytes.length <= opts.targetSizeBytes) break;
+    }
+    return best;
+  } finally {
+    doc.destroy();
+  }
+}
+
 async function optimizePdfFile(file, opts) {
   if (typeof PDFLib === "undefined" || !PDFLib.PDFDocument) throw new Error("PDF 엔진을 불러오지 못했습니다.");
   const sourceBytes = await file.arrayBuffer();
@@ -417,9 +476,21 @@ async function optimizePdfFile(file, opts) {
     objectsPerTick: 100,
     updateFieldAppearances: false,
   });
-  const blob = new Blob([outputBytes], { type: "application/pdf" });
+  let blob = new Blob([outputBytes], { type: "application/pdf" });
+  let detail = recompressedImages ? `${pageCount}페이지 / 이미지 ${recompressedImages}개 재압축` : `${pageCount}페이지`;
+  if (opts.lossBudget === "high") {
+    try {
+      const raster = await rasterizePdfDocument(sourceBytes, opts);
+      if (raster && raster.pageCount === pageCount && raster.bytes.length < blob.size) {
+        blob = new Blob([raster.bytes], { type: "application/pdf" });
+        detail = `${pageCount}페이지 / 스캔형 재구성 ${raster.dpi}DPI (텍스트 선택 불가)`;
+      }
+    } catch {
+      // rasterization is opportunistic -- any failure falls back to the
+      // structure-preserving result computed above
+    }
+  }
   const accepted = outputAccepted(file.size, blob.size, opts);
-  const detail = recompressedImages ? `${pageCount}페이지 / 이미지 ${recompressedImages}개 재압축` : `${pageCount}페이지`;
   if (!accepted.ok) {
     return { status: "skipped", message: `${accepted.message} (${detail})` };
   }
