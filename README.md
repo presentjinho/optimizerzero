@@ -64,7 +64,8 @@ Tune only when needed:
 - `--loss-budget medium`: smaller files with visible-quality tradeoff.
 - `--loss-budget high`: size first; check results before replacing originals.
 - `--quality 1-100`: direct JPEG/WEBP quality control.
-- `--target-size 5MB`: keep only outputs that fit the target.
+- `--target-size 5MB`: keep only outputs that fit the target. When one quality attempt misses, OptimizerZero automatically retries down a quality ladder, then a resize ladder, until the target is hit or both run out.
+- `--max-dimension 1600`: cap an image's longest edge in pixels; applies unconditionally, independent of `--target-size`.
 - `--min-savings-percent 1`: skip tiny wins.
 - `--max-size 150MB`: avoid heavy files in mixed folders.
 - `--workers 4`: use local CPU workers for multi-file jobs. Omit it for the safe automatic default.
@@ -88,6 +89,7 @@ Most users should use goals instead of profiles.
 - PWA cache lets visitors reopen the app after the first visit, including offline AVIF/JXL encoding
 - JSZip and pdf-lib are bundled locally, so deployed Web Lite does not depend on an external CDN
 - one strength slider (7 steps, nano to max) sets quality/target-size/limit together; advanced settings expose target size, minimum savings, max input size, image codec (WebP/AVIF/JPEG XL), and worker concurrency for finer control
+- when a target size is set, a miss retries down a quality ladder and then a resize ladder before giving up, same as the desktop app
 - multiple files compress in parallel across a Web Worker pool sized to the machine's CPU cores, with a live ETA during the run
 - queue rows can be removed one by one before rerunning
 - ZIP/CBZ/EPUB/Office containers can recompress JPG/JPEG/WEBP/BMP/GIF entries in the browser when visual loss is allowed
