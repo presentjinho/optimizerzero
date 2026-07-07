@@ -64,11 +64,11 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("function fileKey(file)", app)
         self.assertIn("function removeFile(key)", app)
         self.assertIn("function resultForKey(key)", app)
-        self.assertIn("function configureDownloadButton(button, blob, name)", app)
+        self.assertIn("function configureDownloadButton(button, url, name)", app)
         self.assertIn('row.dataset.key = key', app)
         self.assertIn('row.querySelector(".remove-button").addEventListener("click", () => removeFile(key))', app)
         self.assertIn("const result = resultForKey(key)", app)
-        self.assertIn("if (result.blob) configureDownloadButton", app)
+        self.assertIn("if (result.blobUrl) configureDownloadButton", app)
         self.assertIn('state.results = state.results.filter((result) => result.key !== key)', app)
         self.assertIn(".remove-button", css)
 
@@ -351,7 +351,8 @@ class WebAssetTests(unittest.TestCase):
         # recording it as an error.
         self.assertIn('opts.codec === "auto"', app)
         self.assertIn('optimizeFile(file, { ...opts, codec: "webp" })', app)
-        self.assertIn('<option value="auto" selected>', html)
+        self.assertIn('<option value="webp" selected>', html)
+        self.assertIn('<option value="auto">', html)
         self.assertIn("self.onmessage = async (event)", avif_jxl_worker)
         self.assertIn('import("./vendor/jsquash-avif/encode.js")', avif_jxl_worker)
         self.assertIn('import("./vendor/jsquash-jxl/encode.js")', avif_jxl_worker)
@@ -360,6 +361,42 @@ class WebAssetTests(unittest.TestCase):
         # paths must stay untouched by the AVIF/JXL codec picker.
         self.assertNotIn("avif", core.lower())
         self.assertNotIn("jxl", core.lower())
+
+    def test_web_falls_back_to_webp_pool_when_avif_worker_unsupported(self):
+        app = self.read("app.js")
+
+        self.assertIn(
+            'const SUPPORTS_AVIF_JXL_WORKER = typeof OffscreenCanvas !== "undefined" && typeof Worker !== "undefined";',
+            app,
+        )
+        self.assertIn('if (opts.codec === "webp" || !SUPPORTS_AVIF_JXL_WORKER) {', app)
+
+    def test_web_scales_default_concurrency_to_device(self):
+        app = self.read("app.js")
+
+        self.assertIn("function detectAutoPoolSize()", app)
+        self.assertIn('window.matchMedia("(pointer: coarse)").matches', app)
+        self.assertIn("navigator.deviceMemory", app)
+        self.assertIn("const AUTO_POOL_SIZE = detectAutoPoolSize();", app)
+
+    def test_web_locks_clear_and_file_input_while_running(self):
+        app = self.read("app.js")
+
+        self.assertIn("function setRunning(running)", app)
+        self.assertIn("el.clearButton.disabled = running", app)
+        self.assertIn("el.fileInput.disabled = running", app)
+        self.assertIn("if (!state.files.length || state.running) return;", app)
+        self.assertIn("if (state.running) return;", app)
+
+    def test_web_revokes_blob_urls_between_runs(self):
+        app = self.read("app.js")
+
+        self.assertIn("function revokeTrackedBlobUrls()", app)
+        self.assertIn("URL.revokeObjectURL(url)", app)
+        # must be called both when a run restarts and when the queue is cleared,
+        # otherwise every re-render after a run leaks one Object URL per row.
+        occurrences = app.count("revokeTrackedBlobUrls();")
+        self.assertGreaterEqual(occurrences, 2)
 
     def test_web_javascript_syntax(self):
         for script in ("app.js", "optimize-core.js", "worker.js", "service-worker.js"):

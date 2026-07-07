@@ -87,12 +87,12 @@
             <label>
               <span>이미지 포맷 (이미지 파일만 적용, PDF/압축파일은 항상 WebP)</span>
               <select id="codec">
-                <option value="auto" selected>자동 (추천)</option>
-                <option value="webp">WebP</option>
+                <option value="webp" selected>WebP (추천)</option>
+                <option value="auto">자동 (AVIF 우선)</option>
                 <option value="avif">AVIF</option>
                 <option value="jxl">JPEG XL</option>
               </select>
-              <span id="codecHint" class="field-hint">AVIF로 먼저 시도하고, 안 되면 WebP로 자동 대체합니다.</span>
+              <span id="codecHint" class="field-hint">빠르고 어떤 기기에서도 잘 열립니다. 추가 다운로드가 없어 가볍습니다.</span>
             </label>
             <label>
               <span>동시 처리 개수</span>

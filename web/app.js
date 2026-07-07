@@ -1,7 +1,7 @@
 // UI state and rendering only — the actual compression logic lives in
 // optimize-core.js (shared with worker.js) so it can run on either the main
 // thread or in a worker pool without duplication.
-const state = { files: [], rejected: [], results: [] };
+const state = { files: [], rejected: [], results: [], running: false };
 const el = {
   dropZone: document.querySelector("#dropZone"),
   fileInput: document.querySelector("#fileInput"),
@@ -105,8 +105,18 @@ function resultClass(result) {
   return "";
 }
 
-function configureDownloadButton(button, blob, name) {
-  const url = URL.createObjectURL(blob);
+// Object URLs are created once per result (in recordResult/recordError) and
+// tracked here so they can be revoked together -- render() rebuilds every
+// row from scratch on each add/remove, and re-creating a fresh URL each time
+// would leak one per row per re-render for as long as the tab stays open.
+const activeBlobUrls = new Set();
+
+function revokeTrackedBlobUrls() {
+  for (const url of activeBlobUrls) URL.revokeObjectURL(url);
+  activeBlobUrls.clear();
+}
+
+function configureDownloadButton(button, url, name) {
   button.hidden = false;
   button.onclick = () => {
     const a = document.createElement("a");
@@ -128,7 +138,7 @@ function applyResultToRow(row, result) {
   } else {
     barWrap.hidden = true;
   }
-  if (result.blob) configureDownloadButton(row.querySelector(".download-button"), result.blob, result.outName || result.name);
+  if (result.blobUrl) configureDownloadButton(row.querySelector(".download-button"), result.blobUrl, result.outName || result.name);
 }
 
 function render() {
@@ -213,9 +223,9 @@ function selectedCodec() {
 }
 
 const CODEC_HINTS = {
-  auto: "AVIF로 먼저 시도하고, 안 되면 WebP로 자동 대체합니다.",
-  webp: "구형 뷰어와 앱까지 폭넓게 호환됩니다.",
-  avif: "같은 화질에서 WebP보다 더 작지만, 최신 뷰어에서만 열립니다.",
+  webp: "빠르고 어떤 기기에서도 잘 열립니다. 추가 다운로드가 없어 가볍습니다.",
+  auto: "AVIF로 먼저 시도하고, 안 되면 WebP로 자동 대체합니다. 인코더를 새로 내려받아 처음 실행이 조금 느립니다.",
+  avif: "같은 화질에서 WebP보다 더 작지만, 최신 뷰어에서만 열리고 인코더를 내려받습니다.",
   jxl: "제일 작지만 실험적입니다 — 여는 프로그램이 지원하는지 먼저 확인하세요.",
 };
 
@@ -251,6 +261,8 @@ function refreshAppStatus() {
 }
 
 function recordResult(file, result) {
+  const blobUrl = result.blob ? URL.createObjectURL(result.blob) : null;
+  if (blobUrl) activeBlobUrls.add(blobUrl);
   const record = {
     key: fileKey(file),
     name: file.name,
@@ -261,6 +273,7 @@ function recordResult(file, result) {
     message: result.message || result.status,
     outName: result.outName || null,
     blob: result.blob || null,
+    blobUrl,
   };
   state.results.push(record);
   const row = findRow(file);
@@ -276,9 +289,23 @@ function recordError(file, message) {
 
 // Multiple files at once are handed to a pool of Web Workers, so several
 // files compress in parallel instead of one at a time. "auto" sizes the pool
-// to this machine's CPU core count (capped at 8); the concurrency picker lets
-// people trade speed for a lighter browser load on shared or older machines.
-const AUTO_POOL_SIZE = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8));
+// to the device rather than just the core count: each worker loads its own
+// copy of JSZip/pdf-lib, so a phone reporting 8 cores but little RAM still
+// shouldn't spin up 8 of them. Touch devices (phones/tablets, via a coarse
+// pointer) and browsers reporting low deviceMemory get a lower cap -- still
+// multi-file, just not maxed out -- while the concurrency picker lets anyone
+// override it either way.
+function detectAutoPoolSize() {
+  const cores = navigator.hardwareConcurrency || 4;
+  const isTouchDevice = typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+  let cap = isTouchDevice ? 4 : 8;
+  if (typeof navigator.deviceMemory === "number" && navigator.deviceMemory <= 4) {
+    cap = Math.min(cap, 2);
+  }
+  return Math.max(1, Math.min(cores, cap));
+}
+
+const AUTO_POOL_SIZE = detectAutoPoolSize();
 
 function selectedPoolSize() {
   const raw = el.concurrency ? el.concurrency.value : "auto";
@@ -358,6 +385,13 @@ function runWithWorkerPool(files, opts, onDone, workerScript = "./worker.js", wo
   });
 }
 
+// The AVIF/JXL worker needs OffscreenCanvas + module workers. Older or
+// budget mobile browsers (older iOS Safari especially) can be missing one
+// of these -- checking up front and routing everything through the classic
+// WebP worker pool in that case means multi-file processing still runs
+// (just at WebP quality) instead of every image failing one at a time.
+const SUPPORTS_AVIF_JXL_WORKER = typeof OffscreenCanvas !== "undefined" && typeof Worker !== "undefined";
+
 // AVIF/JXL only apply to standalone image files (archives/PDF stay WebP --
 // see avif-jxl-worker.js for why), so a non-webp codec splits the batch
 // across two worker pools running concurrently: the plain-image subset goes
@@ -367,7 +401,7 @@ function runWithWorkerPool(files, opts, onDone, workerScript = "./worker.js", wo
 // to WebP (main-thread, via optimize-core.js) if AVIF hard-fails -- e.g. the
 // wasm encoder can't load on this browser/device.
 function runWithCodecRouting(files, opts, onDone) {
-  if (opts.codec === "webp") {
+  if (opts.codec === "webp" || !SUPPORTS_AVIF_JXL_WORKER) {
     return runWithWorkerPool(files, opts, onDone, "./worker.js");
   }
   const imageFiles = files.filter((f) => imageExts.has(extOf(f)));
@@ -416,10 +450,20 @@ async function runSequentialFallback(files, opts, onDone) {
   }
 }
 
+function setRunning(running) {
+  state.running = running;
+  el.runButton.disabled = running;
+  el.clearButton.disabled = running;
+  el.fileInput.disabled = running;
+  el.dropZone.classList.toggle("busy", running);
+  el.dropZone.setAttribute("aria-disabled", String(running));
+}
+
 async function run() {
-  if (!state.files.length) return;
+  if (!state.files.length || state.running) return;
+  revokeTrackedBlobUrls();
   state.results = [];
-  el.runButton.disabled = true;
+  setRunning(true);
   el.reportButton.disabled = true;
   el.bundleButton.disabled = true;
   el.meterFill.style.width = "0%";
@@ -428,22 +472,30 @@ async function run() {
   const files = state.files.slice();
   const startedAt = performance.now();
   let completed = 0;
-  if (el.etaText) el.etaText.textContent = files.length > 1 ? "예상 시간 계산 중…" : "";
+  if (el.etaText) {
+    el.etaText.textContent = opts.codec !== "webp" && !SUPPORTS_AVIF_JXL_WORKER
+      ? "이 브라우저는 AVIF/JPEG XL을 지원하지 않아 WebP로 처리합니다."
+      : files.length > 1 ? "예상 시간 계산 중…" : "";
+  }
   const onDone = () => {
     completed += 1;
     el.meterFill.style.width = `${Math.round((completed / files.length) * 100)}%`;
     updateEta(startedAt, completed, files.length);
   };
 
-  if (typeof Worker !== "undefined") {
-    await runWithCodecRouting(files, opts, onDone);
-  } else {
-    // No Worker support (very rare today) -- optimize-core.js's sequential
-    // path only knows WebP, so fall back to that regardless of the picker.
-    await runSequentialFallback(files, { ...opts, codec: "webp" }, onDone);
+  try {
+    if (typeof Worker !== "undefined") {
+      await runWithCodecRouting(files, opts, onDone);
+    } else {
+      // No Worker support (very rare today) -- optimize-core.js's sequential
+      // path only knows WebP, so fall back to that regardless of the picker.
+      await runSequentialFallback(files, { ...opts, codec: "webp" }, onDone);
+    }
+  } catch (error) {
+    setAppStatus(`처리 중 오류: ${error.message || error}`);
   }
 
-  el.runButton.disabled = false;
+  setRunning(false);
   el.reportButton.disabled = state.results.length === 0;
   el.bundleButton.disabled = optimizedResults().length === 0;
   const saved = state.results.reduce((sum, result) => sum + (result.savedBytes || 0), 0);
@@ -519,16 +571,19 @@ el.dropZone.addEventListener("dragleave", () => el.dropZone.classList.remove("dr
 el.dropZone.addEventListener("drop", (event) => {
   event.preventDefault();
   el.dropZone.classList.remove("dragging");
+  if (state.running) return;
   setFiles(event.dataTransfer.files);
 });
 el.runButton.addEventListener("click", run);
 el.clearButton.addEventListener("click", () => {
+  revokeTrackedBlobUrls();
   state.files = [];
   state.rejected = [];
   state.results = [];
   el.meterFill.style.width = "0%";
   el.reportButton.disabled = true;
   el.bundleButton.disabled = true;
+  if (el.etaText) el.etaText.textContent = "";
   render();
 });
 el.reportButton.addEventListener("click", saveReport);
