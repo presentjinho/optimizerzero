@@ -9,13 +9,15 @@ python -m pip install --upgrade pip
 python -m pip install -e .
 python -m pip install pyinstaller
 if (-not $Lite) {
-  python -m pip install ".[pdf]"
+  python -m pip install ".[pdf]" ".[heic]"
 }
 
 $hiddenImports = @("PIL._tkinter_finder")
 if (-not $Lite) {
   $hiddenImports += "fitz"
   $hiddenImports += "pikepdf"
+  $hiddenImports += "pillow_heif"
+  $hiddenImports += "_pillow_heif"
 }
 
 $args = @(

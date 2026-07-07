@@ -9,6 +9,8 @@ from PIL import Image
 
 from optimizerzero.core import (
     DIMENSION_LADDER,
+    HEIF_AVAILABLE,
+    IMAGE_EXTS,
     OptimizeOptions,
     LossBudget,
     Goal,
@@ -465,6 +467,47 @@ class CoreTests(unittest.TestCase):
             self.assertLess(smallest_result.output_size, source.stat().st_size)
             ok, message = validate_file(Path(smallest_result.output))
             self.assertTrue(ok, message)
+
+
+@unittest.skipUnless(HEIF_AVAILABLE, "pillow-heif not installed")
+class HeicTests(unittest.TestCase):
+    def make_heic_bytes(self, size=(640, 480), quality=92):
+        image = Image.new("RGB", size)
+        pixels = image.load()
+        for y in range(size[1]):
+            for x in range(size[0]):
+                pixels[x, y] = ((x * 3) % 256, (y * 5) % 256, ((x + y) * 7) % 256)
+        out = io.BytesIO()
+        image.save(out, "HEIF", quality=quality)
+        return out.getvalue()
+
+    def test_heic_is_a_recognized_supported_image(self):
+        self.assertIn(".heic", IMAGE_EXTS)
+        self.assertIn(".heif", IMAGE_EXTS)
+
+    def test_heic_recompresses_and_keeps_its_extension(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "photo.heic"
+            source.write_bytes(self.make_heic_bytes())
+
+            result = optimize_one(source, merge_goal_options(Goal.SMALLEST))
+
+            self.assertEqual(result.status, "optimized")
+            self.assertLess(result.output_size, result.original_size)
+            self.assertEqual(Path(result.output).suffix, ".heic")
+            ok, message = validate_file(Path(result.output))
+            self.assertTrue(ok, message)
+
+    def test_heic_is_untouched_under_quality_goal(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "photo.heic"
+            source.write_bytes(self.make_heic_bytes())
+
+            result = optimize_one(source, merge_goal_options(Goal.QUALITY))
+
+            self.assertIn(result.status, {"skipped", "optimized"})
 
 
 if __name__ == "__main__":

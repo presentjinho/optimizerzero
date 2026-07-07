@@ -8,6 +8,7 @@ It is user-centered: start with one practical goal, then tune limits only when n
 - TAR, TGZ, TAR.GZ, TAR.BZ2, TAR.XZ: safe archive recompression
 - PDF: lossless cleanup with PyMuPDF and pikepdf when available
 - JPG, JPEG, PNG, WEBP, BMP, TIFF: optional image recompression
+- HEIC/HEIF: optional image recompression on desktop with `pillow-heif` installed (`pip install "optimizerzero[heic]"`); the Web Lite browser app cannot decode HEIC (no browser support), so HEIC files there fall back to the generic ZIP wrapper
 - ZIP/CBZ/EPUB/Office/OpenDocument containers: format-preserving image entry optimization when useful
 - Generic files: verified `.ozero.zip` fallback when no format-specific optimizer exists
 - Analyze folders by type, size, and optional validity

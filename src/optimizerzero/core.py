@@ -20,10 +20,19 @@ from PIL import Image, ImageFile, ImageOps
 Image.MAX_IMAGE_PIXELS = 160_000_000
 ImageFile.LOAD_TRUNCATED_IMAGES = False
 
+try:
+    import pillow_heif
+
+    pillow_heif.register_heif_opener()
+    HEIF_AVAILABLE = True
+except ImportError:
+    HEIF_AVAILABLE = False
+
 ZIP_CONTAINER_EXTS = {".zip", ".cbz", ".epub", ".docx", ".pptx", ".xlsx", ".odt", ".ods", ".odp", ".jar"}
 TAR_EXTS = {".tar", ".tgz", ".tar.gz", ".tbz2", ".tar.bz2", ".txz", ".tar.xz"}
 ARCHIVE_EXTS = ZIP_CONTAINER_EXTS | TAR_EXTS
-IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
+HEIF_EXTS = {".heic", ".heif"}
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"} | (HEIF_EXTS if HEIF_AVAILABLE else set())
 PDF_EXTS = {".pdf"}
 SUPPORTED_EXTS = ARCHIVE_EXTS | IMAGE_EXTS | PDF_EXTS
 IMAGE_ARCHIVE_EXTS = {".zip", ".cbz"}
@@ -443,6 +452,9 @@ def image_save_args(original_format: str, quality: int | None = None) -> tuple[s
     if original_format in {"JPEG", "WEBP"}:
         quality = 90 if quality is None else clamp_quality(quality)
         return original_format, {"quality": quality, "optimize": True}
+    if original_format in {"HEIF", "HEIC"} and HEIF_AVAILABLE:
+        quality = 90 if quality is None else clamp_quality(quality)
+        return "HEIF", {"quality": quality}
     if original_format == "PNG":
         return "PNG", {"optimize": True, "compress_level": 9}
     return None
@@ -469,7 +481,7 @@ def optimize_image_bytes(data: bytes, options: OptimizeOptions, target_size_byte
                         continue
                     out_format, save_args = save
                     candidate_image = resized
-                    if out_format == "JPEG" and candidate_image.mode not in {"RGB", "L"}:
+                    if out_format in {"JPEG", "HEIF"} and candidate_image.mode not in {"RGB", "L"}:
                         candidate_image = candidate_image.convert("RGB")
                     out = io.BytesIO()
                     candidate_image.save(out, out_format, **save_args)
