@@ -8,19 +8,24 @@ from pathlib import Path
 from PIL import Image
 
 from optimizerzero.core import (
+    DIMENSION_LADDER,
     OptimizeOptions,
     LossBudget,
     Goal,
     Profile,
     analyze_files,
+    dimension_ladder,
     discover_files,
     find_duplicate_files,
     merge_goal_options,
     move_file,
+    optimize_image_bytes,
     optimize_many,
     optimize_one,
     parse_size,
+    quality_ladder,
     planned_output_path,
+    resize_within,
     validate_epub,
     validate_file,
 )
@@ -40,6 +45,30 @@ def make_jpeg_bytes(size=(256, 256)):
         for x in range(size[0]):
             pixels[x, y] = ((x * 3) % 256, (y * 5) % 256, ((x + y) * 7) % 256)
     image.save(out, "JPEG", quality=96)
+    return out.getvalue()
+
+
+def make_detailed_jpeg_bytes(size=(1200, 900)):
+    # A gradient studded with outlined circles -- busy enough that the
+    # quality ladder's floor alone can't shrink it far, but not pure noise
+    # (which JPEG can't usefully compress at any resolution). Only resizing
+    # gets this one small. Seeded for a deterministic fixture.
+    import random
+
+    from PIL import ImageDraw
+
+    rng = random.Random(1234)
+    out = io.BytesIO()
+    image = Image.new("RGB", size)
+    pixels = image.load()
+    for y in range(size[1]):
+        for x in range(size[0]):
+            pixels[x, y] = (int(255 * x / size[0]), int(255 * y / size[1]), int(255 * ((x + y) % 256) / 256))
+    draw = ImageDraw.Draw(image)
+    for _ in range(40):
+        x0, y0 = rng.randrange(0, size[0] - 100), rng.randrange(0, size[1] - 100)
+        draw.ellipse([x0, y0, x0 + rng.randrange(20, 150), y0 + rng.randrange(20, 150)], outline=(255, 255, 255), width=3)
+    image.save(out, "JPEG", quality=95)
     return out.getvalue()
 
 
@@ -303,6 +332,77 @@ class CoreTests(unittest.TestCase):
 
             self.assertEqual(result.status, "optimized")
             self.assertLess(result.output_size, result.original_size)
+
+    def test_quality_ladder_stays_pinned_without_a_target_size(self):
+        options = merge_goal_options(Goal.SMART)
+        self.assertEqual(quality_ladder(options), [88])
+
+    def test_target_size_makes_a_pinned_goal_retry_down_the_ladder(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "photo.jpg"
+            source.write_bytes(make_jpeg_bytes())
+
+            # SMART pins quality=88 (~19.4KB for this fixture); a 12KB target
+            # is unreachable at 88 but sits comfortably inside the LOW-budget
+            # ladder's lower rungs (92/88/84 stays fixed since SMART uses the
+            # BALANCED profile's LOW budget... use SMALLEST's HIGH budget
+            # instead so the ladder has rungs small enough to reach it).
+            options = merge_goal_options(Goal.SMALLEST, target_size_bytes=12000)
+            self.assertEqual(quality_ladder(options), [70, 62, 54, 46])
+
+            result = optimize_one(source, options)
+
+            self.assertEqual(result.status, "optimized")
+            self.assertLessEqual(result.output_size, 12000)
+
+    def test_dimension_ladder_stays_off_without_a_target_or_explicit_cap(self):
+        options = merge_goal_options(Goal.SMALLEST)
+        self.assertEqual(dimension_ladder(options, None), [None])
+
+    def test_dimension_ladder_ignores_target_under_a_none_loss_budget(self):
+        options = merge_goal_options(Goal.SMART, loss_budget=LossBudget.NONE, target_size_bytes=5000)
+        self.assertEqual(dimension_ladder(options, options.target_size_bytes), [None])
+
+    def test_dimension_ladder_escalates_once_a_target_needs_it(self):
+        options = merge_goal_options(Goal.SMALLEST, target_size_bytes=5000)
+        ladder = dimension_ladder(options, options.target_size_bytes)
+        self.assertEqual(ladder, [None, *DIMENSION_LADDER])
+
+    def test_explicit_max_dimension_applies_even_without_a_target(self):
+        options = merge_goal_options(Goal.SMALLEST, max_dimension=500)
+        self.assertEqual(dimension_ladder(options, None), [500])
+
+    def test_resize_within_scales_down_only_past_the_cap(self):
+        image = Image.new("RGB", (1000, 500))
+        untouched = resize_within(image, 2000)
+        self.assertEqual(untouched.size, (1000, 500))
+        scaled = resize_within(image, 400)
+        self.assertEqual(scaled.size, (400, 200))
+
+    def test_target_size_falls_back_to_resizing_when_quality_alone_cannot_reach_it(self):
+        data = make_detailed_jpeg_bytes()
+        options = merge_goal_options(Goal.SMALLEST, target_size_bytes=40 * 1024)
+
+        result = optimize_image_bytes(data, options, options.target_size_bytes)
+
+        self.assertIsNotNone(result)
+        self.assertLessEqual(len(result), options.target_size_bytes)
+        with Image.open(io.BytesIO(result)) as shrunk:
+            self.assertLess(max(shrunk.size), max(Image.open(io.BytesIO(data)).size))
+
+    def test_explicit_max_dimension_threads_through_optimize_one(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "photo.jpg"
+            source.write_bytes(make_detailed_jpeg_bytes())
+
+            options = merge_goal_options(Goal.SMALLEST, max_dimension=300)
+            result = optimize_one(source, options)
+
+            self.assertEqual(result.status, "optimized")
+            with Image.open(result.output) as shrunk:
+                self.assertLessEqual(max(shrunk.size), 300)
 
     def test_pdf_optimizer_uses_available_pdf_engines(self):
         try:

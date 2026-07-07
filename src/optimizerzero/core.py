@@ -67,6 +67,7 @@ class OptimizeOptions:
     loss_budget: LossBudget | None = None
     image_quality: int | None = None
     target_size_bytes: int | None = None
+    max_dimension: int | None = None
     generic_fallback: bool = True
     workers: int = 1
 
@@ -194,16 +195,53 @@ def effective_loss_budget(options: OptimizeOptions) -> LossBudget:
 
 
 def quality_ladder(options: OptimizeOptions) -> list[int]:
-    if options.image_quality is not None:
-        return [clamp_quality(options.image_quality)]
     budget = effective_loss_budget(options)
     if budget == LossBudget.NONE:
         return []
     if budget == LossBudget.LOW:
-        return [92, 88, 84]
-    if budget == LossBudget.MEDIUM:
-        return [86, 80, 74, 68]
-    return [78, 70, 62, 54, 46]
+        ladder = [92, 88, 84]
+    elif budget == LossBudget.MEDIUM:
+        ladder = [86, 80, 74, 68]
+    else:
+        ladder = [78, 70, 62, 54, 46]
+    if options.image_quality is None:
+        return ladder
+    pinned = clamp_quality(options.image_quality)
+    if not options.target_size_bytes:
+        return [pinned]
+    # A goal/CLI call pins one quality for predictable, single-shot output.
+    # But once someone asks for a target size, a single miss shouldn't be
+    # the end of it -- keep stepping down this budget's remaining rungs so
+    # the target actually gets chased instead of silently given up on.
+    return [pinned] + [step for step in ladder if step < pinned]
+
+
+DIMENSION_LADDER = (2400, 1800, 1400, 1000, 700)
+
+
+def dimension_ladder(options: OptimizeOptions, target_size_bytes: int | None) -> list[int | None]:
+    if options.max_dimension:
+        # An explicit cap is a direct request -- apply it every time, not just
+        # while chasing a target.
+        return [options.max_dimension]
+    if not target_size_bytes or effective_loss_budget(options) == LossBudget.NONE:
+        return [None]
+    # Quality alone has a floor: a busy/high-detail image can't shrink past a
+    # point without visible blocking. Once a target size is in play, resizing
+    # is the next lever -- try it only after the quality ladder would need it.
+    return [None, *DIMENSION_LADDER]
+
+
+def resize_within(image: Image.Image, max_dimension: int | None) -> Image.Image:
+    if not max_dimension:
+        return image
+    width, height = image.size
+    longest = max(width, height)
+    if longest <= max_dimension:
+        return image
+    scale = max_dimension / float(longest)
+    size = (max(1, round(width * scale)), max(1, round(height * scale)))
+    return image.resize(size, Image.LANCZOS)
 
 
 def should_consider_file(path: Path, generic_fallback: bool = True) -> bool:
@@ -423,24 +461,26 @@ def optimize_image_bytes(data: bytes, options: OptimizeOptions, target_size_byte
                 else:
                     return None
             best: bytes | None = None
-            for quality in qualities:
-                save = image_save_args(original_format, quality)
-                if save is None:
-                    continue
-                out_format, save_args = save
-                candidate_image = image
-                if out_format == "JPEG" and candidate_image.mode not in {"RGB", "L"}:
-                    candidate_image = candidate_image.convert("RGB")
-                out = io.BytesIO()
-                candidate_image.save(out, out_format, **save_args)
-                candidate = out.getvalue()
-                if not candidate or len(candidate) >= len(data):
-                    continue
-                with Image.open(io.BytesIO(candidate)) as verified:
-                    verified.verify()
-                best = candidate
-                if target_size_bytes is None or len(candidate) <= target_size_bytes:
-                    return candidate
+            for max_dimension in dimension_ladder(options, target_size_bytes):
+                resized = resize_within(image, max_dimension)
+                for quality in qualities:
+                    save = image_save_args(original_format, quality)
+                    if save is None:
+                        continue
+                    out_format, save_args = save
+                    candidate_image = resized
+                    if out_format == "JPEG" and candidate_image.mode not in {"RGB", "L"}:
+                        candidate_image = candidate_image.convert("RGB")
+                    out = io.BytesIO()
+                    candidate_image.save(out, out_format, **save_args)
+                    candidate = out.getvalue()
+                    if not candidate or len(candidate) >= len(data):
+                        continue
+                    with Image.open(io.BytesIO(candidate)) as verified:
+                        verified.verify()
+                    best = candidate
+                    if target_size_bytes is None or len(candidate) <= target_size_bytes:
+                        return candidate
             return best
     except Exception:
         return None
@@ -462,7 +502,7 @@ def optimize_zip_container(source: Path, target: Path, options: OptimizeOptions)
             if source.suffix.lower() == ".epub" and name == "mimetype":
                 compress_type = zipfile.ZIP_STORED
             if source.suffix.lower() in IMAGE_OPTIMIZABLE_CONTAINER_EXTS and Path(name).suffix.lower() in IMAGE_EXTS:
-                optimized = optimize_image_bytes(data, options)
+                optimized = optimize_image_bytes(data, options, options.target_size_bytes)
                 if optimized is not None:
                     data = optimized
             if source.suffix.lower() == ".epub" and index == 0 and name != "mimetype":
@@ -545,7 +585,11 @@ def recompress_pdf_images(document, options: OptimizeOptions) -> int:
             if not _pdf_colorspace_is_recompressable(obj.get("/ColorSpace")):
                 continue
             raw = bytes(obj.read_raw_bytes())
-            optimized = optimize_image_bytes(raw, options)
+            # There's no meaningful per-image target size inside a PDF, so
+            # each embedded image chases the whole file's target -- a
+            # conservative heuristic, but if every image individually fits
+            # under it the rewritten PDF almost certainly will too.
+            optimized = optimize_image_bytes(raw, options, options.target_size_bytes)
             if not optimized or len(optimized) >= len(raw):
                 continue
             with Image.open(io.BytesIO(optimized)) as check:
