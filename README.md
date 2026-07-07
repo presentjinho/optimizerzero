@@ -85,14 +85,15 @@ Most users should use goals instead of profiles.
 `web/` contains a Netlify-ready browser app for people who do not want to install anything.
 
 - files stay in the browser
-- PWA cache lets visitors reopen the app after the first visit
-- JSZip is included locally, so deployed Web Lite does not depend on an external CDN
-- intent presets choose practical defaults for archive, sharing, messenger, email, and quality-first use
+- PWA cache lets visitors reopen the app after the first visit, including offline AVIF/JXL encoding
+- JSZip and pdf-lib are bundled locally, so deployed Web Lite does not depend on an external CDN
+- one strength slider (7 steps, nano to max) sets quality/target-size/limit together; advanced settings expose target size, minimum savings, max input size, image codec (WebP/AVIF/JPEG XL), and worker concurrency for finer control
+- multiple files compress in parallel across a Web Worker pool sized to the machine's CPU cores, with a live ETA during the run
 - queue rows can be removed one by one before rerunning
-- ZIP/CBZ/EPUB/Office containers can recompress JPG/JPEG/WEBP entries in the browser when visual loss is allowed
+- ZIP/CBZ/EPUB/Office containers can recompress JPG/JPEG/WEBP/BMP/GIF entries in the browser when visual loss is allowed
 - damaged or unsupported image entries inside containers are kept original instead of failing the whole job
-- good for small ZIP/CBZ/EPUB/Office containers and standalone images
-- not meant for heavy PDF cleanup or very large folders
+- PDF pages are rewritten with pdf-lib (cleanup + object streams), and embedded JPEG images are recompressed too when the loss budget allows it
+- good for ZIP/CBZ/EPUB/Office containers, standalone images, and PDFs; very large folders are still better handled by the desktop app
 
 Deploy with `netlify.toml` or set the publish directory to `web`.
 Cloudflare Pages can also read `wrangler.toml`, which points Pages at `./web`.
