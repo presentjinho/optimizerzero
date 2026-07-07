@@ -132,7 +132,7 @@ class WebAssetTests(unittest.TestCase):
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v17', worker)
+        self.assertIn('optimizerzero-web-lite-v18', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")
@@ -456,11 +456,11 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("closePreview();\n  revokeTrackedBlobUrls();", app)
         self.assertIn('id="previewModal"', html)
         self.assertIn('id="previewHandle"', html)
-        # a class selector unconditionally setting display would beat the
-        # [hidden] UA rule on specificity ties -- must have an explicit
-        # override or the modal shows on page load regardless of the
-        # hidden attribute (this exact bug shipped once already)
-        self.assertIn(".preview-modal[hidden] { display: none; }", css)
+        # any class setting its own display beats the UA's [hidden] rule
+        # (author rules always win) -- this bug shipped twice, once as an
+        # always-visible preview modal and once as an empty-state box shown
+        # next to real file rows. The global override kills the whole class.
+        self.assertIn("[hidden] { display: none !important; }", css)
 
     def test_web_image_only_zip_becomes_cbz(self):
         core = self.read("optimize-core.js")
