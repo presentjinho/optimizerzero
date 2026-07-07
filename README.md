@@ -78,7 +78,7 @@ OptimizerZero preserves image file formats in archives. The Web Lite app convert
 
 - `safe`: container/PDF cleanup and lossless image cleanup only.
 - `balanced`: conservative image recompression.
-- `strong`: stronger image recompression. Use after checking visual quality.
+- `strong`: stronger image recompression. Use after checking visual quality. PNGs also get palette quantization here (256 colors, more if a target size needs it) -- a big win on screenshots/illustrations, visibly lossy on photos.
 
 Most users should use goals instead of profiles.
 

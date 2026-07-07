@@ -5,7 +5,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from optimizerzero.core import (
     DIMENSION_LADDER,
@@ -25,7 +25,9 @@ from optimizerzero.core import (
     optimize_many,
     optimize_one,
     parse_size,
+    png_quantize_ladder,
     quality_ladder,
+    quantize_png,
     planned_output_path,
     resize_within,
     validate_epub,
@@ -56,8 +58,6 @@ def make_detailed_jpeg_bytes(size=(1200, 900)):
     # (which JPEG can't usefully compress at any resolution). Only resizing
     # gets this one small. Seeded for a deterministic fixture.
     import random
-
-    from PIL import ImageDraw
 
     rng = random.Random(1234)
     out = io.BytesIO()
@@ -508,6 +508,75 @@ class HeicTests(unittest.TestCase):
             result = optimize_one(source, merge_goal_options(Goal.QUALITY))
 
             self.assertIn(result.status, {"skipped", "optimized"})
+
+
+def make_screenshot_png_bytes(size=(800, 600)):
+    # Flat color blocks -- the kind of low-color-count image where palette
+    # quantization gives real wins, unlike a photo/gradient.
+    image = Image.new("RGB", size, (240, 240, 245))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([50, 50, 750, 150], fill=(30, 90, 200))
+    draw.rectangle([50, 200, 400, 550], fill=(255, 255, 255), outline=(0, 0, 0), width=3)
+    for i in range(20):
+        draw.rectangle([70, 220 + i * 15, 380, 230 + i * 15], fill=(20, 20, 20))
+    out = io.BytesIO()
+    image.save(out, "PNG")
+    return out.getvalue()
+
+
+class PngQuantizeTests(unittest.TestCase):
+    def test_quantize_ladder_stays_lossless_outside_strong_profile(self):
+        smart = merge_goal_options(Goal.SMART)
+        quality = merge_goal_options(Goal.QUALITY)
+        self.assertEqual(png_quantize_ladder(smart), [None])
+        self.assertEqual(png_quantize_ladder(quality), [None])
+
+    def test_quantize_ladder_engages_only_for_strong_profile(self):
+        strong = merge_goal_options(Goal.SMALLEST)
+        self.assertEqual(png_quantize_ladder(strong), [256, None])
+
+    def test_quantize_ladder_escalates_for_a_target_size(self):
+        strong = merge_goal_options(Goal.SMALLEST, target_size_bytes=5000)
+        self.assertEqual(png_quantize_ladder(strong), [256, 128, 64, 32, None])
+
+    def test_quantize_png_preserves_alpha_channel(self):
+        image = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        draw.ellipse([30, 30, 170, 170], fill=(30, 144, 255, 255))
+        draw.rectangle([80, 80, 120, 120], fill=(255, 255, 255, 180))
+
+        quantized = quantize_png(image, 256)
+
+        self.assertIsNotNone(quantized)
+        reloaded = quantized.convert("RGBA")
+        self.assertEqual(reloaded.getpixel((10, 10)), (0, 0, 0, 0))
+        self.assertEqual(reloaded.getpixel((100, 100)), (255, 255, 255, 180))
+        self.assertEqual(reloaded.getpixel((40, 100)), (30, 144, 255, 255))
+
+    def test_smallest_goal_quantizes_a_screenshot_like_png(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "shot.png"
+            source.write_bytes(make_screenshot_png_bytes())
+
+            result = optimize_one(source, merge_goal_options(Goal.SMALLEST))
+
+            self.assertEqual(result.status, "optimized")
+            self.assertLess(result.output_size, result.original_size)
+            with Image.open(result.output) as saved:
+                self.assertEqual(saved.mode, "P")
+
+    def test_smart_goal_does_not_quantize_a_screenshot_like_png(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "shot.png"
+            source.write_bytes(make_screenshot_png_bytes())
+
+            result = optimize_one(source, merge_goal_options(Goal.SMART))
+
+            if result.status == "optimized":
+                with Image.open(result.output) as saved:
+                    self.assertNotEqual(saved.mode, "P")
 
 
 if __name__ == "__main__":

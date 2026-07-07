@@ -253,6 +253,33 @@ def resize_within(image: Image.Image, max_dimension: int | None) -> Image.Image:
     return image.resize(size, Image.LANCZOS)
 
 
+PNG_QUANTIZE_LADDER = (256, 128, 64, 32)
+
+
+def png_quantize_ladder(options: OptimizeOptions) -> list[int | None]:
+    # Palette quantization changes color depth -- visibly lossy on photos,
+    # so it's opt-in via the STRONG profile rather than a default for every
+    # PNG. `None` (the existing lossless zlib recompress) always stays in
+    # the ladder as a safety net for images quantization doesn't help.
+    if effective_loss_budget(options) == LossBudget.NONE or options.profile != Profile.STRONG:
+        return [None]
+    if not options.target_size_bytes:
+        return [256, None]
+    return [*PNG_QUANTIZE_LADDER, None]
+
+
+def quantize_png(image: Image.Image, colors: int) -> Image.Image | None:
+    try:
+        if image.mode in {"RGBA", "LA"} or (image.mode == "P" and "transparency" in image.info):
+            # Median cut can't handle an alpha channel; fast octree can and
+            # keeps a per-pixel alpha approximation instead of dropping it.
+            return image.convert("RGBA").quantize(colors=colors, method=Image.Quantize.FASTOCTREE)
+        base = image if image.mode in {"RGB", "L"} else image.convert("RGB")
+        return base.quantize(colors=colors, method=Image.Quantize.MEDIANCUT)
+    except Exception:
+        return None
+
+
 def should_consider_file(path: Path, generic_fallback: bool = True) -> bool:
     if any(part in DEFAULT_IGNORE_DIRS for part in path.parts):
         return False
@@ -466,23 +493,35 @@ def optimize_image_bytes(data: bytes, options: OptimizeOptions, target_size_byte
             original_format = image.format or "PNG"
             image = ImageOps.exif_transpose(image)
             image.load()
-            qualities = quality_ladder(options)
-            if not qualities:
-                if original_format.upper() == "PNG":
-                    qualities = [None]
-                else:
+            is_png = original_format.upper() == "PNG"
+            if is_png:
+                # PNG's own ladder (lossless recompress, optionally palette
+                # quantization) -- quality_ladder()'s 1-100 JPEG/WEBP/HEIF
+                # scale doesn't apply here, and a goal's pinned image_quality
+                # would otherwise make this branch look non-empty and never
+                # get a chance to run.
+                qualities = png_quantize_ladder(options)
+            else:
+                qualities = quality_ladder(options)
+                if not qualities:
                     return None
             best: bytes | None = None
             for max_dimension in dimension_ladder(options, target_size_bytes):
                 resized = resize_within(image, max_dimension)
                 for quality in qualities:
-                    save = image_save_args(original_format, quality)
-                    if save is None:
-                        continue
-                    out_format, save_args = save
-                    candidate_image = resized
-                    if out_format in {"JPEG", "HEIF"} and candidate_image.mode not in {"RGB", "L"}:
-                        candidate_image = candidate_image.convert("RGB")
+                    if is_png and quality is not None:
+                        candidate_image = quantize_png(resized, quality)
+                        if candidate_image is None:
+                            continue
+                        out_format, save_args = "PNG", {"optimize": True}
+                    else:
+                        save = image_save_args(original_format, quality)
+                        if save is None:
+                            continue
+                        out_format, save_args = save
+                        candidate_image = resized
+                        if out_format in {"JPEG", "HEIF"} and candidate_image.mode not in {"RGB", "L"}:
+                            candidate_image = candidate_image.convert("RGB")
                     out = io.BytesIO()
                     candidate_image.save(out, out_format, **save_args)
                     candidate = out.getvalue()
