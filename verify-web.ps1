@@ -36,8 +36,13 @@ $PythonExe = Get-PythonExe
 $env:PYTHONPATH = Join-Path $PSScriptRoot "src"
 
 node --check web\app.js
+node --check web\optimize-core.js
+node --check web\worker.js
 node --check web\service-worker.js
 node --check functions\_middleware.js
+Get-Content -Raw -LiteralPath web\avif-jxl-worker.js | node --input-type=module --check
+Get-Content -Raw -LiteralPath web\vendor\jsquash-avif\encode.js | node --input-type=module --check
+Get-Content -Raw -LiteralPath web\vendor\jsquash-jxl\encode.js | node --input-type=module --check
 & $PythonExe -m unittest tests.test_web_assets -v
 
 function Assert-TextContains {
@@ -77,6 +82,15 @@ if (-not (Test-Path -LiteralPath "web\vendor\JSZIP_LICENSE.markdown")) {
 }
 if (-not (Test-Path -LiteralPath "web\vendor\PDF_LIB_LICENSE.md")) {
   throw "Missing pdf-lib license file."
+}
+if (-not (Test-Path -LiteralPath "web\vendor\JSQUASH_LICENSE.md")) {
+  throw "Missing jSquash (AVIF/JXL) license file."
+}
+if (-not (Test-Path -LiteralPath "web\vendor\jsquash-avif\avif_enc.wasm")) {
+  throw "Missing AVIF encoder wasm."
+}
+if (-not (Test-Path -LiteralPath "web\vendor\jsquash-jxl\jxl_enc.wasm")) {
+  throw "Missing JXL encoder wasm."
 }
 
 Write-Host "Web Lite verified."

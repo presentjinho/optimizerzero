@@ -16,6 +16,12 @@
 /app.js
   Content-Type: application/javascript; charset=utf-8
 
+/optimize-core.js
+  Content-Type: application/javascript; charset=utf-8
+
+/worker.js
+  Content-Type: application/javascript; charset=utf-8
+
 /vendor/jszip.min.js
   Content-Type: application/javascript; charset=utf-8
 

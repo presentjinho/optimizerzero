@@ -20,6 +20,9 @@ try {
   $requiredWebEntries = @(
     "index.html",
     "app.js",
+    "optimize-core.js",
+    "worker.js",
+    "avif-jxl-worker.js",
     "PRIVACY.md",
     "styles.css",
     "service-worker.js",
@@ -30,7 +33,18 @@ try {
     "vendor/jszip.min.js",
     "vendor/JSZIP_LICENSE.markdown",
     "vendor/pdf-lib.min.js",
-    "vendor/PDF_LIB_LICENSE.md"
+    "vendor/PDF_LIB_LICENSE.md",
+    "vendor/JSQUASH_LICENSE.md",
+    "vendor/jsquash-avif/encode.js",
+    "vendor/jsquash-avif/meta.js",
+    "vendor/jsquash-avif/utils.js",
+    "vendor/jsquash-avif/avif_enc.js",
+    "vendor/jsquash-avif/avif_enc.wasm",
+    "vendor/jsquash-jxl/encode.js",
+    "vendor/jsquash-jxl/meta.js",
+    "vendor/jsquash-jxl/utils.js",
+    "vendor/jsquash-jxl/jxl_enc.js",
+    "vendor/jsquash-jxl/jxl_enc.wasm"
   )
   $entries = (tar -tf $tempWebZipPath) | ForEach-Object { $_.TrimStart("./") }
   foreach ($entry in $requiredWebEntries) {

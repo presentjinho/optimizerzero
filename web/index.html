@@ -16,7 +16,7 @@
       <section class="control-panel" aria-label="OptimizerZero controls">
         <div class="brand-block">
           <p class="eyebrow">local-first compression</p>
-          <h1>OptimizerZero Web Lite</h1>
+          <h1><span class="brand-name">OptimizerZero</span> <span class="brand-sub">Web Lite</span></h1>
           <p class="summary">
             ZIP, CBZ, EPUB, Office/OpenDocument, 이미지, PDF, 일반 파일을 로컬에서 처리합니다.
             원본은 보존하고 결과 파일만 새로 내려받습니다.
@@ -29,75 +29,84 @@
           <div class="drop-mark">OZ</div>
           <div>
             <strong>파일 추가</strong>
-            <span>zip, cbz, epub, docx, pptx, xlsx, odt, ods, odp, pdf, jpg, png, webp, 기타 파일</span>
+            <span>zip, cbz, epub, docx, pptx, xlsx, odt, ods, odp, jar, pdf, jpg, png, webp, bmp, gif, 기타 파일</span>
           </div>
         </label>
 
-        <div class="settings-grid">
-          <label>
-            <span>목적</span>
-            <select id="intent">
-              <option value="archive" data-message="보관 추천: 원본 보존, 무손실 중심, 큰 파일 허용.">보관 - 원본 보존</option>
-              <option value="share" data-message="공유 추천: 균형 압축, 낮은 손실, 화질 88." selected>공유 - 균형 압축</option>
-              <option value="messenger" data-message="메신저 추천: 용량 우선, 결과 확인 후 사용.">메신저 - 용량 우선</option>
-              <option value="email" data-message="이메일 추천: 첨부 제한에 맞춤.">이메일 - 첨부 제한</option>
-              <option value="quality" data-message="화질 추천: 거의 같게, 절감이 작으면 스킵.">화질 - 최소 손실</option>
-            </select>
-          </label>
-          <label>
-            <span>프로필</span>
-            <select id="profile">
-              <option value="safe">safe - 안전 우선</option>
-              <option value="balanced" selected>balanced - 균형</option>
-              <option value="strong">strong - 강한 압축</option>
-            </select>
-          </label>
-          <label>
-            <span>손실 허용</span>
-            <select id="lossBudget">
-              <option value="">목적에 맞춤</option>
-              <option value="none">none - 원본 보존</option>
-              <option value="low">low - 거의 같게</option>
-              <option value="medium">medium - 균형</option>
-              <option value="high">high - 용량 우선</option>
-            </select>
-          </label>
-          <label>
-            <span>이미지 화질 <b id="qualityLabel">88</b></span>
-            <input id="quality" type="range" min="45" max="96" value="88" />
-          </label>
-          <label>
-            <span>파일당 목표 용량</span>
-            <select id="targetSize">
-              <option value="0">제한 없음</option>
-              <option value="5">5 MB</option>
-              <option value="10">10 MB</option>
-              <option value="25">25 MB</option>
-              <option value="50">50 MB</option>
-            </select>
-          </label>
-          <label>
-            <span>최소 절감률</span>
-            <select id="minSavings">
-              <option value="0">0%</option>
-              <option value="1" selected>1%</option>
-              <option value="3">3%</option>
-              <option value="5">5%</option>
-            </select>
-          </label>
-          <label>
-            <span>최대 입력 크기</span>
-            <select id="limit">
-              <option value="25">25 MB</option>
-              <option value="75" selected>75 MB</option>
-              <option value="150">150 MB</option>
-            </select>
-          </label>
+        <div class="strength-control">
+          <div class="strength-header">
+            <span>압축 강도 (드래그로 선택)</span>
+            <b id="strengthLabel">기본 압축</b>
+          </div>
+          <input id="strength" type="range" min="1" max="7" step="1" value="4" aria-describedby="recommendation" />
+          <div class="strength-ticks" aria-hidden="true">
+            <span>나노</span>
+            <span>살짝</span>
+            <span>가벼움</span>
+            <span>기본</span>
+            <span>강함</span>
+            <span>강력</span>
+            <span>최대</span>
+          </div>
         </div>
 
         <div id="recommendation" class="recommendation">
-          공유 추천: 균형 압축, 낮은 손실, 화질 88.
+          기본 압축: 화질과 용량의 균형.
         </div>
+
+        <details class="advanced-settings">
+          <summary>고급 설정</summary>
+          <div class="settings-grid">
+            <label>
+              <span>파일당 목표 용량</span>
+              <select id="targetSize">
+                <option value="0">제한 없음</option>
+                <option value="5">5 MB</option>
+                <option value="10">10 MB</option>
+                <option value="25">25 MB</option>
+                <option value="50">50 MB</option>
+              </select>
+            </label>
+            <label>
+              <span>최소 절감률</span>
+              <select id="minSavings">
+                <option value="0">0%</option>
+                <option value="1" selected>1%</option>
+                <option value="3">3%</option>
+                <option value="5">5%</option>
+              </select>
+            </label>
+            <label>
+              <span>최대 입력 크기</span>
+              <select id="limit">
+                <option value="25">25 MB</option>
+                <option value="75" selected>75 MB</option>
+                <option value="150">150 MB</option>
+              </select>
+            </label>
+            <label>
+              <span>이미지 포맷 (이미지 파일만 적용, PDF/압축파일은 항상 WebP)</span>
+              <select id="codec">
+                <option value="auto" selected>자동 (추천)</option>
+                <option value="webp">WebP</option>
+                <option value="avif">AVIF</option>
+                <option value="jxl">JPEG XL</option>
+              </select>
+              <span id="codecHint" class="field-hint">AVIF로 먼저 시도하고, 안 되면 WebP로 자동 대체합니다.</span>
+            </label>
+            <label>
+              <span>동시 처리 개수</span>
+              <select id="concurrency">
+                <option value="auto" selected>자동 (이 PC 코어 수에 맞춤)</option>
+                <option value="1">1개씩 (가장 안정적)</option>
+                <option value="2">2개</option>
+                <option value="4">4개</option>
+                <option value="8">8개</option>
+              </select>
+              <span id="concurrencyHint" class="field-hint">여러 파일을 동시에 돌릴 스레드 수입니다. 높일수록 빠르지만 브라우저가 더 무거워질 수 있습니다.</span>
+            </label>
+          </div>
+        </details>
 
         <div class="action-row">
           <button id="runButton" class="primary" type="button">시작</button>
@@ -109,6 +118,7 @@
         <div class="meter" aria-label="progress">
           <div id="meterFill"></div>
         </div>
+        <p id="etaText" class="field-hint eta-text"></p>
       </section>
 
       <section class="workspace" aria-label="File workspace">
@@ -135,7 +145,10 @@
           <strong class="file-name"></strong>
           <span class="file-meta"></span>
         </div>
-        <div class="file-status"></div>
+        <div class="file-status-wrap">
+          <div class="file-status"></div>
+          <div class="file-bar" hidden><div class="file-bar-fill"></div></div>
+        </div>
         <button class="remove-button" type="button" title="목록에서 제거" aria-label="목록에서 제거">×</button>
         <button class="download-button" type="button" hidden>다운로드</button>
       </article>
@@ -143,6 +156,7 @@
 
     <script src="./vendor/jszip.min.js"></script>
     <script src="./vendor/pdf-lib.min.js"></script>
+    <script src="./optimize-core.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

@@ -86,15 +86,30 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("font-size: 16px", css)
         self.assertNotIn('el.dropZone.addEventListener("click"', app)
 
-    def test_intent_options_have_korean_recommendations(self):
-        parser = IdParser()
-        parser.feed(self.read("index.html"))
+    def test_strength_slider_has_seven_levels(self):
+        html = self.read("index.html")
+        app = self.read("app.js")
 
-        intent_options = [option for option in parser.options if option.get("value") in {"archive", "share", "messenger", "email", "quality"}]
-        self.assertEqual(len(intent_options), 5)
-        for option in intent_options:
-            message = option.get("data-message", "")
-            self.assertIn("\ucd94\ucc9c", message)
+        self.assertIn('id="strength" type="range" min="1" max="7" step="1" value="4"', html)
+        ticks_block = html.split('class="strength-ticks"', 1)[1].split("</div>", 1)[0]
+        self.assertEqual(ticks_block.count("<span>"), 7)
+        self.assertIn("const STRENGTH_LEVELS = [", app)
+        self.assertEqual(app.count("label:"), 7)
+        self.assertIn("\ub098\ub178 \uc555\ucd95", app)
+        self.assertIn("\ucd5c\ub300 \uc555\ucd95", app)
+        self.assertIn('el.strength.addEventListener("input", applyStrength)', app)
+
+    def test_nano_level_actually_recompresses_instead_of_a_no_op(self):
+        # Level 1 (나노 압축) used to set lossBudget "none", which makes
+        # optimizeImageFile() skip recompression outright -- a loose image file at
+        # the gentlest setting produced zero savings, which reads as "broken" to a
+        # user moving the slider off its default. It must still touch pixels, just
+        # at a very high quality floor.
+        app = self.read("app.js")
+        levels_block = app.split("const STRENGTH_LEVELS = [", 1)[1].split("];", 1)[0]
+        first_level = levels_block.strip().splitlines()[0]
+        self.assertNotIn('lossBudget: "none"', first_level)
+        self.assertIn('quality: 97', first_level)
 
     def test_service_worker_caches_required_assets(self):
         worker = self.read("service-worker.js")
@@ -107,10 +122,17 @@ class WebAssetTests(unittest.TestCase):
             "./icon.svg",
             "./vendor/jszip.min.js",
             "./vendor/pdf-lib.min.js",
+            "./optimize-core.js",
+            "./worker.js",
+            "./avif-jxl-worker.js",
+            "./vendor/jsquash-avif/avif_enc.wasm",
+            "./vendor/jsquash-avif/encode.js",
+            "./vendor/jsquash-jxl/jxl_enc.wasm",
+            "./vendor/jsquash-jxl/encode.js",
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v7', worker)
+        self.assertIn('optimizerzero-web-lite-v12', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")
@@ -248,55 +270,99 @@ class WebAssetTests(unittest.TestCase):
 
     def test_app_reports_archive_dependency_status(self):
         app = self.read("app.js")
+        core = self.read("optimize-core.js")
 
         self.assertIn("dependencyStatus", app)
-        self.assertIn("archive ready", app)
-        self.assertIn("PDF ready", app)
-        self.assertIn("Archive engine unavailable. Standalone images still work.", app)
-        self.assertIn("PDF engine unavailable.", app)
+        self.assertIn("압축 엔진 준비됨", app)
+        self.assertIn("PDF 엔진 준비됨", app)
+        self.assertIn("압축 엔진을 불러오지 못했습니다.", core)
+        self.assertIn("PDF 엔진을 불러오지 못했습니다.", core)
 
     def test_web_recompresses_images_inside_supported_containers(self):
-        app = self.read("app.js")
+        core = self.read("optimize-core.js")
 
-        self.assertIn('const imageOptimizableArchiveExts = new Set(["zip", "cbz", "epub", "docx", "pptx", "xlsx", "odt", "ods", "odp", "jar"])', app)
-        self.assertIn("imageOptimizableArchiveExts.has(fileExt)", app)
-        self.assertIn('const archiveImageExts = new Set(["jpg", "jpeg", "webp"])', app)
+        self.assertIn('const imageOptimizableArchiveExts = new Set(["zip", "cbz", "epub", "docx", "pptx", "xlsx", "odt", "ods", "odp", "jar"])', core)
+        self.assertIn("imageOptimizableArchiveExts.has(fileExt)", core)
+        self.assertIn('const archiveImageExts = new Set(["jpg", "jpeg", "webp", "bmp", "gif", "png"])', core)
 
     def test_web_keeps_archive_entry_when_image_recompression_fails(self):
-        app = self.read("app.js")
+        core = self.read("optimize-core.js")
 
-        self.assertIn("try {", app)
-        self.assertIn("optimized = await recompressImage(data, mimeType)", app)
-        self.assertIn("return { blob: data, changed: false, skipped: true }", app)
-        self.assertIn("imageEntriesSkipped", app)
-        self.assertIn("image entries kept original", app)
+        self.assertIn("try {", core)
+        self.assertIn("({ blob: optimized } = await recompressImage(data, mimeType, opts.quality, opts.maxDimension))", core)
+        self.assertIn("return { blob: data, changed: false, skipped: true }", core)
+        self.assertIn("imageEntriesSkipped", core)
+        self.assertIn("이미지 ${imageEntriesSkipped}개는 원본 유지", core)
+
+    def test_web_skips_recompression_for_animated_images(self):
+        core = self.read("optimize-core.js")
+
+        self.assertIn("async function isAnimatedGif(blob)", core)
+        self.assertIn("async function isAnimatedWebp(blob)", core)
+        self.assertIn("async function isAnimatedPng(blob)", core)
+        self.assertIn("async function isUnsafeToRecompress(ext, blob)", core)
+        self.assertIn("움직이는 이미지라 프레임 보존을 위해 원본 유지", core)
 
     def test_web_has_generic_zip_fallback(self):
-        app = self.read("app.js")
+        core = self.read("optimize-core.js")
         readme = self.read("README.md")
 
-        self.assertIn("async function optimizeGenericFile(file)", app)
-        self.assertIn("generic ZIP fallback", app)
-        self.assertIn("optimizeGenericFile(file)", app)
-        self.assertIn(".ozero.zip", app)
+        self.assertIn("async function optimizeGenericFile(file, opts)", core)
+        self.assertIn("일반 ZIP 압축", core)
+        self.assertIn(".ozero.zip", core)
         self.assertIn("Generic-file `.ozero.zip` fallback", readme)
 
     def test_web_pdf_mode_is_explicit(self):
         html = self.read("index.html")
-        app = self.read("app.js")
+        core = self.read("optimize-core.js")
         readme = self.read("README.md")
 
         self.assertIn("pdf", html)
-        self.assertIn('const pdfExts = new Set(["pdf"])', app)
-        self.assertIn("async function optimizePdfFile(file)", app)
-        self.assertIn("PDFLib.PDFDocument.load", app)
-        self.assertIn("useObjectStreams: true", app)
-        self.assertIn(".ozero.pdf", app)
-        self.assertNotIn("PDF web safe ZIP", app)
+        self.assertIn('const pdfExts = new Set(["pdf"])', core)
+        self.assertIn("async function optimizePdfFile(file, opts)", core)
+        self.assertIn("PDFLib.PDFDocument.load", core)
+        self.assertIn("useObjectStreams: true", core)
+        self.assertIn(".ozero.pdf", core)
+        self.assertNotIn("PDF web safe ZIP", core)
         self.assertIn("PDF browser-side rewrite", readme)
 
+    def test_web_uses_worker_pool_for_multiple_files(self):
+        app = self.read("app.js")
+        worker = self.read("worker.js")
+
+        self.assertIn("navigator.hardwareConcurrency", app)
+        self.assertIn("function runWithWorkerPool(files, opts, onDone, workerScript = \"./worker.js\", workerOptions, onFailure)", app)
+        self.assertIn("new Worker(workerScript, workerOptions)", app)
+        self.assertIn("function runSequentialFallback(files, opts, onDone)", app)
+        self.assertIn("importScripts(", worker)
+        self.assertIn("optimizeFile(file, opts)", worker)
+
+    def test_web_routes_avif_jxl_codecs_to_module_worker(self):
+        app = self.read("app.js")
+        core = self.read("optimize-core.js")
+        html = self.read("index.html")
+        avif_jxl_worker = self.read("avif-jxl-worker.js")
+
+        self.assertIn("function runWithCodecRouting(files, opts, onDone)", app)
+        self.assertIn('"./avif-jxl-worker.js", { type: "module" }', app)
+        self.assertIn("codec: selectedCodec()", app)
+        # "auto" (the default codec) must run the AVIF engine but fall a
+        # single file back to WebP on a hard encode failure rather than
+        # recording it as an error.
+        self.assertIn('opts.codec === "auto"', app)
+        self.assertIn('optimizeFile(file, { ...opts, codec: "webp" })', app)
+        self.assertIn('<option value="auto" selected>', html)
+        self.assertIn("self.onmessage = async (event)", avif_jxl_worker)
+        self.assertIn('import("./vendor/jsquash-avif/encode.js")', avif_jxl_worker)
+        self.assertIn('import("./vendor/jsquash-jxl/encode.js")', avif_jxl_worker)
+        # PDFs/archives can't carry AVIF/JXL streams (PDF spec only allows
+        # DCTDecode/JPXDecode image filters) -- optimize-core.js's PDF/archive
+        # paths must stay untouched by the AVIF/JXL codec picker.
+        self.assertNotIn("avif", core.lower())
+        self.assertNotIn("jxl", core.lower())
+
     def test_web_javascript_syntax(self):
-        for script in ("app.js", "service-worker.js"):
+        for script in ("app.js", "optimize-core.js", "worker.js", "service-worker.js"):
             with self.subTest(script=script):
                 try:
                     completed = subprocess.run(
