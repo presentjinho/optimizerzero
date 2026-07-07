@@ -29,7 +29,7 @@ $args = @(
 foreach ($hiddenImport in $hiddenImports) {
   $args = @("--hidden-import", $hiddenImport) + $args
 }
-foreach ($excluded in @("torch", "tensorflow", "pandas", "scipy", "matplotlib", "sklearn", "IPython", "jupyter")) {
+foreach ($excluded in @("torch", "tensorflow", "pandas", "scipy", "matplotlib", "sklearn", "IPython", "jupyter", "lxml")) {
   $args = @("--exclude-module", $excluded) + $args
 }
 
