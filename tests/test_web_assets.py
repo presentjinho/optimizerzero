@@ -99,6 +99,15 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("\ucd5c\ub300 \uc555\ucd95", app)
         self.assertIn('el.strength.addEventListener("input", applyStrength)', app)
 
+    def test_skip_messages_explain_why_and_what_to_try(self):
+        # A bare "기준 미달" skip sends users off to ask a human what it
+        # means. Skips must carry the reason and the next thing to try.
+        core = self.read("optimize-core.js")
+        self.assertIn("ALREADY_COMPRESSED_EXTS", core)
+        self.assertIn("전용 인코더", core)
+        self.assertIn("강력/최대 레벨은 페이지를 이미지로 재구성", core)
+        self.assertIn("데스크탑 앱이 더 강력합니다", core)
+
     def test_worker_script_urls_are_version_busted_in_sync(self):
         # Worker importScripts and Worker() spawn URLs carry a ?vNN buster:
         # without it, a worker created before the service worker takes
@@ -166,7 +175,7 @@ class WebAssetTests(unittest.TestCase):
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v21', worker)
+        self.assertIn('optimizerzero-web-lite-v22', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")
