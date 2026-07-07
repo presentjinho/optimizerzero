@@ -418,7 +418,7 @@ function applyConcurrencyHint() {
 // instead of recording it as an error. It must NOT fire for legitimate
 // skip outcomes (animated image, savings threshold not met) -- those come
 // back as `ok: true` with a "skipped" status and are recorded as-is.
-function runWithWorkerPool(files, opts, onDone, workerScript = "./worker.js?v21", workerOptions, onFailure) {
+function runWithWorkerPool(files, opts, onDone, workerScript = "./worker.js?v22", workerOptions, onFailure) {
   if (!files.length) return Promise.resolve();
   return new Promise((resolve) => {
     const queue = files.slice();
@@ -492,7 +492,7 @@ const SUPPORTS_AVIF_JXL_WORKER = typeof OffscreenCanvas !== "undefined" && typeo
 // wasm encoder can't load on this browser/device.
 function runWithCodecRouting(files, opts, onDone) {
   if (opts.codec === "webp" || !SUPPORTS_AVIF_JXL_WORKER) {
-    return runWithWorkerPool(files, opts, onDone, "./worker.js?v21");
+    return runWithWorkerPool(files, opts, onDone, "./worker.js?v22");
   }
   const imageFiles = files.filter((f) => imageExts.has(extOf(f)));
   const otherFiles = files.filter((f) => !imageExts.has(extOf(f)));
@@ -500,8 +500,8 @@ function runWithCodecRouting(files, opts, onDone) {
   const engineOpts = isAuto ? { ...opts, codec: "avif" } : opts;
   const fallbackToWebp = isAuto ? (file) => optimizeFile(file, { ...opts, codec: "webp" }) : null;
   return Promise.all([
-    runWithWorkerPool(imageFiles, engineOpts, onDone, "./avif-jxl-worker.js?v21", { type: "module" }, fallbackToWebp),
-    runWithWorkerPool(otherFiles, { ...opts, codec: "webp" }, onDone, "./worker.js?v21"),
+    runWithWorkerPool(imageFiles, engineOpts, onDone, "./avif-jxl-worker.js?v22", { type: "module" }, fallbackToWebp),
+    runWithWorkerPool(otherFiles, { ...opts, codec: "webp" }, onDone, "./worker.js?v22"),
   ]);
 }
 

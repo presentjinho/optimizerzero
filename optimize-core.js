@@ -307,7 +307,27 @@ async function optimizeArchive(file, opts) {
   return { status: "optimized", blob, outName, saved: accepted.saved, message: detailParts.join(" / ") };
 }
 
+// Formats that are already internally compressed -- deflating them again is
+// wasted CPU that always ends in "skipped". Named so the skip message can say
+// WHY instead of leaving the user to ask.
+const ALREADY_COMPRESSED_EXTS = new Set([
+  "mp4", "mkv", "avi", "webm", "mov", "m4v", "wmv", "flv",
+  "mp3", "aac", "m4a", "ogg", "opus", "flac",
+  "7z", "rar", "gz", "bz2", "xz", "zst",
+  "apk", "ipa", "dmg", "iso",
+]);
+
 async function optimizeGenericFile(file, opts) {
+  const ext = extOf(file);
+  if (ALREADY_COMPRESSED_EXTS.has(ext)) {
+    const kind = /^(mp4|mkv|avi|webm|mov|m4v|wmv|flv)$/.test(ext) ? "영상"
+      : /^(mp3|aac|m4a|ogg|opus|flac)$/.test(ext) ? "오디오"
+      : "이미 압축된 형식";
+    return {
+      status: "skipped",
+      message: `${kind}(${ext})은 자체 코덱으로 이미 압축되어 있어 재압축 효과가 없습니다. 영상/오디오는 전용 인코더(예: HandBrake)가 필요합니다.`,
+    };
+  }
   if (typeof JSZip === "undefined") throw new Error("압축 엔진을 불러오지 못했습니다.");
   const output = new JSZip();
   output.file(safeArchiveName(file.name), file);
@@ -520,7 +540,12 @@ async function optimizePdfFile(file, opts) {
   }
   const accepted = outputAccepted(file.size, blob.size, opts);
   if (!accepted.ok) {
-    return { status: "skipped", message: `${accepted.message} (${detail})` };
+    // Say WHY and what to try next -- "기준 미달" alone sends users off to
+    // ask a human what it means.
+    const hint = opts.lossBudget === "high"
+      ? " · 이 PDF는 브라우저에서 더 줄이기 어렵습니다(텍스트 위주이거나 이미 최적화됨). 데스크탑 앱이 더 강력합니다."
+      : " · 강력/최대 레벨은 페이지를 이미지로 재구성해 스캔 PDF를 크게 줄일 수 있습니다.";
+    return { status: "skipped", message: `${accepted.message} (${detail})${hint}` };
   }
   const outName = file.name.replace(/(\.[^.]+)?$/, ".ozero.pdf");
   return { status: "optimized", blob, outName, saved: accepted.saved, message: `PDF 재압축 / ${detail}` };
