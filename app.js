@@ -26,6 +26,14 @@ const el = {
   bundleButton: document.querySelector("#bundleButton"),
   meterFill: document.querySelector("#meterFill"),
   rowTemplate: document.querySelector("#fileRowTemplate"),
+  previewModal: document.querySelector("#previewModal"),
+  previewTitle: document.querySelector("#previewTitle"),
+  previewClose: document.querySelector("#previewClose"),
+  previewSlider: document.querySelector("#previewSlider"),
+  previewBefore: document.querySelector("#previewBefore"),
+  previewAfter: document.querySelector("#previewAfter"),
+  previewBeforeWrap: document.querySelector("#previewBeforeWrap"),
+  previewHandle: document.querySelector("#previewHandle"),
 };
 
 // 7-point drag scale from barely-touched to as-small-as-possible. Index 0 is
@@ -126,7 +134,7 @@ function configureDownloadButton(button, url, name) {
   };
 }
 
-function applyResultToRow(row, result) {
+function applyResultToRow(row, result, file) {
   const statusEl = row.querySelector(".file-status");
   statusEl.textContent = resultLabel(result);
   statusEl.className = `file-status ${resultClass(result)}`;
@@ -139,6 +147,12 @@ function applyResultToRow(row, result) {
     barWrap.hidden = true;
   }
   if (result.blobUrl) configureDownloadButton(row.querySelector(".download-button"), result.blobUrl, result.outName || result.name);
+  const previewButton = row.querySelector(".preview-button");
+  if (previewButton) {
+    const canPreview = file && result.status === "optimized" && result.blobUrl && imageExts.has(extOf(file));
+    previewButton.hidden = !canPreview;
+    if (canPreview) previewButton.onclick = () => openPreview(file, result);
+  }
 }
 
 function render() {
@@ -158,7 +172,7 @@ function render() {
     row.querySelector(".remove-button").addEventListener("click", () => removeFile(key));
     el.fileList.append(row);
     const result = resultForKey(key);
-    if (result) applyResultToRow(row, result);
+    if (result) applyResultToRow(row, result, file);
   }
   for (const item of state.rejected) {
     const row = el.rowTemplate.content.firstElementChild.cloneNode(true);
@@ -277,15 +291,87 @@ function recordResult(file, result) {
   };
   state.results.push(record);
   const row = findRow(file);
-  if (row) applyResultToRow(row, record);
+  if (row) applyResultToRow(row, record, file);
 }
 
 function recordError(file, message) {
   const record = { key: fileKey(file), name: file.name, status: "error", message, originalSize: file.size, outputSize: file.size, savedBytes: 0 };
   state.results.push(record);
   const row = findRow(file);
-  if (row) applyResultToRow(row, record);
+  if (row) applyResultToRow(row, record, file);
 }
+
+// The "before" object URL is only created while the modal is open (no point
+// holding one per row for files that never get previewed) and revoked on
+// close. The "after" URL already lives on the result record.
+let previewBeforeUrl = null;
+let previewDragging = false;
+
+function setPreviewPosition(percent) {
+  const clamped = Math.min(100, Math.max(0, percent));
+  el.previewBeforeWrap.style.width = `${clamped}%`;
+  el.previewHandle.style.left = `${clamped}%`;
+  el.previewHandle.setAttribute("aria-valuenow", String(Math.round(clamped)));
+}
+
+function previewPercentFromEvent(event) {
+  const rect = el.previewSlider.getBoundingClientRect();
+  const x = (event.touches ? event.touches[0].clientX : event.clientX) - rect.left;
+  return (x / rect.width) * 100;
+}
+
+function onPreviewDragStart(event) {
+  previewDragging = true;
+  setPreviewPosition(previewPercentFromEvent(event));
+}
+
+function onPreviewDragMove(event) {
+  if (!previewDragging) return;
+  setPreviewPosition(previewPercentFromEvent(event));
+}
+
+function onPreviewDragEnd() {
+  previewDragging = false;
+}
+
+function onPreviewKeydown(event) {
+  const current = parseFloat(el.previewHandle.style.left) || 50;
+  if (event.key === "ArrowLeft") setPreviewPosition(current - 5);
+  else if (event.key === "ArrowRight") setPreviewPosition(current + 5);
+}
+
+function openPreview(file, result) {
+  if (previewBeforeUrl) URL.revokeObjectURL(previewBeforeUrl);
+  previewBeforeUrl = URL.createObjectURL(file);
+  el.previewBefore.src = previewBeforeUrl;
+  el.previewAfter.src = result.blobUrl;
+  el.previewTitle.textContent = `${file.name} -- ${formatBytes(result.originalSize)} -> ${formatBytes(result.outputSize)}`;
+  setPreviewPosition(50);
+  el.previewModal.hidden = false;
+}
+
+function closePreview() {
+  el.previewModal.hidden = true;
+  if (previewBeforeUrl) {
+    URL.revokeObjectURL(previewBeforeUrl);
+    previewBeforeUrl = null;
+  }
+  el.previewBefore.src = "";
+  el.previewAfter.src = "";
+}
+
+el.previewClose.addEventListener("click", closePreview);
+el.previewModal.addEventListener("click", (event) => {
+  if (event.target === el.previewModal) closePreview();
+});
+el.previewHandle.addEventListener("pointerdown", onPreviewDragStart);
+el.previewSlider.addEventListener("pointerdown", onPreviewDragStart);
+window.addEventListener("pointermove", onPreviewDragMove);
+window.addEventListener("pointerup", onPreviewDragEnd);
+el.previewHandle.addEventListener("keydown", onPreviewKeydown);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !el.previewModal.hidden) closePreview();
+});
 
 // Multiple files at once are handed to a pool of Web Workers, so several
 // files compress in parallel instead of one at a time. "auto" sizes the pool
@@ -461,6 +547,7 @@ function setRunning(running) {
 
 async function run() {
   if (!state.files.length || state.running) return;
+  closePreview();
   revokeTrackedBlobUrls();
   state.results = [];
   setRunning(true);
@@ -576,6 +663,7 @@ el.dropZone.addEventListener("drop", (event) => {
 });
 el.runButton.addEventListener("click", run);
 el.clearButton.addEventListener("click", () => {
+  closePreview();
   revokeTrackedBlobUrls();
   state.files = [];
   state.rejected = [];
