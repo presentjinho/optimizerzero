@@ -145,6 +145,40 @@ async function encodeWith(codec, imageData, quality) {
   return { buffer, mime: "image/jxl", ext: ".jxl" };
 }
 
+// Mirrors optimize-core.js's qualityLadder()/dimensionLadder(): without a
+// target size, encode once at the strength level's own quality/cap. Once a
+// target size is set and the first attempt misses, step both knobs down
+// until it's hit or the rungs run out, instead of giving up on one try.
+// jsquash quality options are on a 0-100 scale; OZ's internal opts.quality is 0-1.
+function qualityLadder(opts) {
+  const chosen = Math.round(opts.quality * 100);
+  if (!opts.targetSizeBytes || opts.targetSizeBytes <= 0) return [chosen];
+  const floor = 35;
+  const steps = [chosen];
+  for (let quality = chosen - 12; quality > floor; quality -= 12) steps.push(quality);
+  if (steps[steps.length - 1] > floor) steps.push(floor);
+  return steps;
+}
+
+const DIMENSION_LADDER = [1600, 1200, 900, 700, 500, 350];
+
+function dimensionLadder(opts) {
+  const cap = opts.maxDimension || 0;
+  if (!opts.targetSizeBytes || opts.targetSizeBytes <= 0) return [cap];
+  const rungs = cap > 0 ? DIMENSION_LADDER.filter((step) => step < cap) : DIMENSION_LADDER;
+  return [cap, ...rungs];
+}
+
+async function encodeCandidate(bitmap, opts, maxDimension, quality) {
+  const { width, height } = computeResizedDimensions(bitmap.width, bitmap.height, maxDimension);
+  const canvas = new OffscreenCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const { buffer, mime, ext } = await encodeWith(opts.codec, imageData, quality);
+  return { blob: new Blob([buffer], { type: mime }), ext };
+}
+
 async function optimizeImageFile(file, opts) {
   const ext = extOfName(file.name);
   if (await isUnsafeToRecompress(ext, file)) {
@@ -152,21 +186,29 @@ async function optimizeImageFile(file, opts) {
   }
 
   const bitmap = await createImageBitmap(file);
-  const { width, height } = computeResizedDimensions(bitmap.width, bitmap.height, opts.maxDimension);
-  const canvas = new OffscreenCanvas(width, height);
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(bitmap, 0, 0, width, height);
-  const imageData = ctx.getImageData(0, 0, width, height);
+  let best = null;
+  ladders: for (const maxDimension of dimensionLadder(opts)) {
+    for (const quality of qualityLadder(opts)) {
+      let candidate;
+      try {
+        candidate = await encodeCandidate(bitmap, opts, maxDimension, quality);
+      } catch {
+        continue;
+      }
+      if (!candidate.blob || candidate.blob.size >= file.size) continue;
+      if (!best || candidate.blob.size < best.blob.size) best = candidate;
+      if (!opts.targetSizeBytes || candidate.blob.size <= opts.targetSizeBytes) {
+        best = candidate;
+        break ladders;
+      }
+    }
+  }
+  if (!best) return { status: "skipped", message: "이미지 변환 실패" };
 
-  // jsquash quality options are on a 0-100 scale; OZ's internal opts.quality is 0-1.
-  const quality = Math.round(opts.quality * 100);
-  const { buffer, mime, ext: outExt } = await encodeWith(opts.codec, imageData, quality);
-  const blob = new Blob([buffer], { type: mime });
-
-  const accepted = outputAccepted(file.size, blob.size, opts);
+  const accepted = outputAccepted(file.size, best.blob.size, opts);
   if (!accepted.ok) return { status: "skipped", message: accepted.message };
-  const outName = file.name.replace(/(\.[^.]+)?$/, `.ozero${outExt}`);
-  return { status: "optimized", blob, outName, saved: accepted.saved };
+  const outName = file.name.replace(/(\.[^.]+)?$/, `.ozero${best.ext}`);
+  return { status: "optimized", blob: best.blob, outName, saved: accepted.saved };
 }
 
 self.onmessage = async (event) => {

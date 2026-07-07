@@ -166,23 +166,75 @@ async function recompressImage(blob, mimeType, quality, maxDimension = 0) {
   return { blob: outBlob, width, height };
 }
 
+// Mirrors desktop core.py's quality_ladder(): the strength slider's chosen
+// quality is a single predictable knob and stays that way when there's no
+// target size. Once a target size is set, a single miss shouldn't be the
+// end of it -- step down toward a floor so the target actually gets chased
+// instead of the first attempt just giving up.
+function qualityLadder(opts) {
+  if (opts.lossBudget === "none") return [];
+  const chosen = opts.quality;
+  if (!opts.targetSizeBytes || opts.targetSizeBytes <= 0) return [chosen];
+  const floor = 0.35;
+  const steps = [chosen];
+  for (let quality = chosen - 0.12; quality > floor; quality -= 0.12) {
+    steps.push(Math.round(quality * 100) / 100);
+  }
+  if (steps[steps.length - 1] > floor) steps.push(floor);
+  return steps;
+}
+
+// Mirrors desktop core.py's dimension_ladder(): a strength level's maxDimension
+// is a single predictable cap and stays that way without a target size. Once a
+// target size is set and quality alone can't reach it, step the cap down
+// further instead of giving up -- same idea as the quality ladder, applied to
+// dimension. Never escalates past the level's own cap (only tighter).
+const DIMENSION_LADDER = [1600, 1200, 900, 700, 500, 350];
+
+function dimensionLadder(opts) {
+  const cap = opts.maxDimension || 0;
+  if (!opts.targetSizeBytes || opts.targetSizeBytes <= 0 || opts.lossBudget === "none") {
+    return [cap];
+  }
+  const rungs = cap > 0 ? DIMENSION_LADDER.filter((step) => step < cap) : DIMENSION_LADDER;
+  return [cap, ...rungs];
+}
+
+// Tries each dimension cap, and within it each quality rung, keeping the
+// smallest candidate seen and returning as soon as one fits
+// opts.targetSizeBytes (or, with no target size, returning the first/only
+// combination immediately -- unchanged behavior). Returns null if every
+// combination fails or none shrinks the input at all.
+async function recompressImageWithLadder(blob, opts, mimeType) {
+  let best = null;
+  for (const maxDimension of dimensionLadder(opts)) {
+    for (const quality of qualityLadder(opts)) {
+      let candidate;
+      try {
+        candidate = await recompressImage(blob, mimeType, quality, maxDimension);
+      } catch {
+        continue;
+      }
+      if (!candidate.blob || candidate.blob.size >= blob.size) continue;
+      if (!best || candidate.blob.size < best.blob.size) best = candidate;
+      if (!opts.targetSizeBytes || candidate.blob.size <= opts.targetSizeBytes) return candidate;
+    }
+  }
+  return best;
+}
+
 async function optimizeImageFile(file, opts) {
   if (opts.lossBudget === "none") return { status: "skipped", message: "손실 없음 설정이라 원본 유지" };
   const ext = extOf(file);
   if (await isUnsafeToRecompress(ext, file)) {
     return { status: "skipped", message: "움직이는 이미지라 프레임 보존을 위해 원본 유지" };
   }
-  let blob;
-  try {
-    ({ blob } = await recompressImage(file, "image/webp", opts.quality, opts.maxDimension));
-  } catch {
-    return { status: "skipped", message: "이미지 변환 실패" };
-  }
-  if (!blob) return { status: "skipped", message: "이미지 변환 실패" };
-  const accepted = outputAccepted(file.size, blob.size, opts);
+  const result = await recompressImageWithLadder(file, opts, "image/webp");
+  if (!result || !result.blob) return { status: "skipped", message: "이미지 변환 실패" };
+  const accepted = outputAccepted(file.size, result.blob.size, opts);
   if (!accepted.ok) return { status: "skipped", message: accepted.message };
   const outName = file.name.replace(/(\.[^.]+)?$/, ".ozero.webp");
-  return { status: "optimized", blob, outName, saved: accepted.saved };
+  return { status: "optimized", blob: result.blob, outName, saved: accepted.saved };
 }
 
 function safeArchiveName(name) {
@@ -206,14 +258,9 @@ async function maybeOptimizeArchiveEntry(fileExt, cleanName, data, opts) {
     return { blob: data, changed: false, skipped: true };
   }
   const mimeType = imageMimeForExt(entryExt);
-  let optimized;
-  try {
-    ({ blob: optimized } = await recompressImage(data, mimeType, opts.quality, opts.maxDimension));
-  } catch {
-    return { blob: data, changed: false, skipped: true };
-  }
-  if (!optimized || optimized.size >= data.size) return { blob: data, changed: false };
-  return { blob: optimized, changed: true };
+  const result = await recompressImageWithLadder(data, opts, mimeType);
+  if (!result || !result.blob) return { blob: data, changed: false, skipped: true };
+  return { blob: result.blob, changed: true };
 }
 
 async function optimizeArchive(file, opts) {
@@ -278,18 +325,15 @@ async function recompressPdfImages(pdfDoc, opts) {
     const colorSpace = dict.lookup(PDFName.of("ColorSpace"));
     if (!(colorSpace instanceof PDFName) || !RECOMPRESSABLE_PDF_COLORSPACES.has(colorSpace.asString().slice(1))) continue;
     const sourceBytes = obj.getContents();
-    let recompressed;
-    try {
-      recompressed = await recompressImage(
-        new Blob([sourceBytes], { type: "image/jpeg" }),
-        "image/jpeg",
-        opts.quality,
-        opts.maxDimension
-      );
-    } catch {
-      continue;
-    }
-    if (!recompressed.blob || recompressed.blob.size >= sourceBytes.byteLength) continue;
+    // There's no meaningful per-image target size inside a PDF, so each
+    // embedded image chases the whole file's target -- conservative, but if
+    // every image fits under it the rewritten PDF almost certainly will too.
+    const recompressed = await recompressImageWithLadder(
+      new Blob([sourceBytes], { type: "image/jpeg" }),
+      opts,
+      "image/jpeg"
+    );
+    if (!recompressed || !recompressed.blob) continue;
     const newBytes = new Uint8Array(await recompressed.blob.arrayBuffer());
     dict.set(PDFName.of("Length"), PDFNumber.of(newBytes.length));
     // Must match the resized pixel data — a stale /Width or /Height here
