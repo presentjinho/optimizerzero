@@ -645,6 +645,46 @@ def optimize_tar_container(source: Path, target: Path) -> tuple[bool, str]:
     return validate_tar(target, expected_names)
 
 
+def pdf_image_rewrite_ladder(options: OptimizeOptions) -> list[tuple[int, int, int]]:
+    """DPI/quality rungs for PyMuPDF's Document.rewrite_images.
+
+    Same shape as the other ladders: one predictable rung when no target size
+    is set, an escalating list when a target is being chased. Each rung is
+    (dpi_threshold, dpi_target, jpeg_quality) -- only images rendered above
+    dpi_threshold get downsampled to dpi_target, so text-sized graphics and
+    already-small images are left alone.
+    """
+    qualities = quality_ladder(options)
+    if not qualities:
+        return []
+    budget = effective_loss_budget(options)
+    if not options.target_size_bytes:
+        by_budget = {
+            LossBudget.LOW: (300, 200),
+            LossBudget.MEDIUM: (250, 150),
+            LossBudget.HIGH: (200, 120),
+        }
+        threshold, target_dpi = by_budget[budget]
+        return [(threshold, target_dpi, qualities[0])]
+    dpi_rungs = [(300, 200), (250, 150), (200, 120), (150, 96), (120, 72)]
+    return [
+        (threshold, target_dpi, qualities[min(index, len(qualities) - 1)])
+        for index, (threshold, target_dpi) in enumerate(dpi_rungs)
+    ]
+
+
+def _pdf_filter_is_dct(filt) -> bool:
+    import pikepdf
+
+    if filt == pikepdf.Name("/DCTDecode"):
+        return True
+    # /Filter [/DCTDecode] -- same encoding, array spelling. Common in
+    # real-world PDFs and previously skipped for no good reason.
+    if isinstance(filt, pikepdf.Array) and len(filt) == 1:
+        return str(filt[0]) == "/DCTDecode"
+    return False
+
+
 def _pdf_colorspace_is_recompressable(colorspace) -> bool:
     import pikepdf
 
@@ -682,7 +722,7 @@ def recompress_pdf_images(document, options: OptimizeOptions) -> int:
         try:
             if not obj.get("/Subtype") == pikepdf.Name("/Image"):
                 continue
-            if obj.get("/Filter") != pikepdf.Name("/DCTDecode"):
+            if not _pdf_filter_is_dct(obj.get("/Filter")):
                 continue
             if obj.get("/Decode") is not None:
                 continue
@@ -733,6 +773,54 @@ def optimize_pdf(source: Path, target: Path, options: OptimizeOptions | None = N
             candidates.append((fitz_candidate, "PyMuPDF", 0))
         except Exception as exc:
             errors.append(f"PyMuPDF: {exc}")
+
+        # Third engine: PyMuPDF's rewrite_images. Unlike the pikepdf pass below
+        # (JPEG/DCTDecode streams only), this sees every embedded raster --
+        # FlateDecode scans, filter arrays, exotic colorspaces -- and also
+        # downsamples images rendered far above useful DPI. That combination is
+        # what actually shrinks big scanned/exported PDFs, which the other two
+        # engines barely touch.
+        rewrite_rungs = pdf_image_rewrite_ladder(options)
+        if rewrite_rungs:
+            try:
+                import fitz
+                if not hasattr(fitz.Document, "rewrite_images"):
+                    raise AttributeError("this PyMuPDF has no Document.rewrite_images")
+                rewrite_candidate = temp_dir / "pymupdf_images.pdf"
+                for threshold, target_dpi, quality in rewrite_rungs:
+                    # Reopen the source each rung: rewriting an already
+                    # rewritten document compounds JPEG loss instead of
+                    # trading quality for size along one clean axis.
+                    with fitz.open(str(source)) as document:
+                        page_count = document.page_count
+                        document.rewrite_images(
+                            dpi_threshold=threshold,
+                            dpi_target=target_dpi,
+                            quality=quality,
+                            lossy=True,
+                            lossless=True,
+                        )
+                        document.save(
+                            str(rewrite_candidate),
+                            garbage=4,
+                            clean=True,
+                            deflate=True,
+                            deflate_images=True,
+                            deflate_fonts=True,
+                            use_objstms=1,
+                            compression_effort=9,
+                        )
+                    if (
+                        options.target_size_bytes is None
+                        or rewrite_candidate.stat().st_size <= options.target_size_bytes
+                    ):
+                        break
+                with fitz.open(str(rewrite_candidate)) as verified:
+                    if verified.page_count != page_count:
+                        raise ValueError("PDF page count changed")
+                candidates.append((rewrite_candidate, "PyMuPDF image rewrite", 0))
+            except Exception as exc:
+                errors.append(f"PyMuPDF rewrite_images: {exc}")
 
         try:
             import pikepdf

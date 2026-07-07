@@ -132,7 +132,7 @@ class WebAssetTests(unittest.TestCase):
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v15', worker)
+        self.assertIn('optimizerzero-web-lite-v17', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")
@@ -352,6 +352,23 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn(".ozero.pdf", core)
         self.assertNotIn("PDF web safe ZIP", core)
         self.assertIn("PDF browser-side rewrite", readme)
+
+    def test_web_pdf_recompresses_common_real_world_image_variants(self):
+        # Filter-array spelling and ICCBased-wrapped colorspaces are how most
+        # real exporters mark embedded JPEGs. Only accepting the bare
+        # /DCTDecode + /DeviceRGB shape left big PDFs effectively untouched.
+        core = self.read("optimize-core.js")
+        app = self.read("app.js")
+
+        self.assertIn("function pdfFilterIsDct(", core)
+        self.assertIn("function pdfColorSpaceIsRecompressable(", core)
+        self.assertIn('PDFName.of("ICCBased")', core)
+        # Canvas re-encode always outputs 8-bit RGB -- the dict must be
+        # rewritten to match or gray/ICC sources render wrong after replace.
+        self.assertIn('dict.set(PDFName.of("ColorSpace"), PDFName.of("DeviceRGB"))', core)
+        self.assertIn('dict.delete(PDFName.of("DecodeParms"))', core)
+        # Stronger presets should not reject files the default preset accepts.
+        self.assertNotIn("limit: 25,", app)
 
     def test_web_uses_worker_pool_for_multiple_files(self):
         app = self.read("app.js")

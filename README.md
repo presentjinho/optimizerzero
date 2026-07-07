@@ -6,7 +6,7 @@ It is user-centered: start with one practical goal, then tune limits only when n
 
 - ZIP, CBZ, EPUB, DOCX, PPTX, XLSX, ODT, ODS, ODP, JAR: safe container recompression
 - TAR, TGZ, TAR.GZ, TAR.BZ2, TAR.XZ: safe archive recompression
-- PDF: lossless cleanup with PyMuPDF and pikepdf when available
+- PDF: lossless cleanup with PyMuPDF and pikepdf when available; when visual loss is allowed, embedded images are recompressed too -- on desktop the PyMuPDF rewrite engine handles every raster type (FlateDecode scans included) and downsamples images stored far above useful DPI, which is what actually shrinks big scanned/exported PDFs
 - JPG, JPEG, PNG, WEBP: optional image recompression
 - BMP, TIFF: converted to PNG on desktop (these formats have no compression of their own, so this is always a real, always-lossless win regardless of goal); archive entries with these extensions are left untouched since renaming them would break formats that reference embedded images by exact filename (DOCX/PPTX/XLSX/ODT/EPUB manifests). Web already handles BMP via its Canvas-based re-encode; TIFF has no browser decode support, so it falls back to the generic ZIP wrapper there.
 - HEIC/HEIF: optional image recompression on desktop with `pillow-heif` installed (`pip install "optimizerzero[heic]"`); the Web Lite browser app cannot decode HEIC (no browser support), so HEIC files there fall back to the generic ZIP wrapper
@@ -100,7 +100,7 @@ Most users should use goals instead of profiles.
 - optimized image results get a before/after slider preview (drag or arrow keys) to check quality before downloading
 - ZIP/CBZ/EPUB/Office containers can recompress JPG/JPEG/WEBP/BMP/GIF entries in the browser when visual loss is allowed
 - damaged or unsupported image entries inside containers are kept original instead of failing the whole job
-- PDF pages are rewritten with pdf-lib (cleanup + object streams), and embedded JPEG images are recompressed too when the loss budget allows it
+- PDF pages are rewritten with pdf-lib (cleanup + object streams), and embedded JPEG images are recompressed too when the loss budget allows it -- including the common real-world spellings (`/Filter [/DCTDecode]` arrays, ICCBased-wrapped RGB/gray colorspaces). Losslessly-stored (FlateDecode) page scans can't be rebuilt in the browser; the desktop app's PyMuPDF engine handles those
 - good for ZIP/CBZ/EPUB/Office containers, standalone images, and PDFs; very large folders are still better handled by the desktop app
 
 Deploy with `netlify.toml` or set the publish directory to `web`.

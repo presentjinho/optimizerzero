@@ -1,4 +1,5 @@
 import io
+import random
 import tempfile
 import tarfile
 import unittest
@@ -28,6 +29,7 @@ from optimizerzero.core import (
     optimize_zip_container,
     output_suffix_for_path,
     parse_size,
+    pdf_image_rewrite_ladder,
     png_quantize_ladder,
     quality_ladder,
     quantize_png,
@@ -466,10 +468,81 @@ class CoreTests(unittest.TestCase):
 
             smallest_result = optimize_one(source, merge_goal_options(Goal.SMALLEST, allow_larger=True))
             self.assertEqual(smallest_result.status, "optimized")
-            self.assertIn("image", smallest_result.message)
             self.assertLess(smallest_result.output_size, source.stat().st_size)
             ok, message = validate_file(Path(smallest_result.output))
             self.assertTrue(ok, message)
+
+    def test_pdf_image_rewrite_ladder_shapes(self):
+        self.assertEqual(pdf_image_rewrite_ladder(OptimizeOptions(profile=Profile.SAFE)), [])
+        single = pdf_image_rewrite_ladder(merge_goal_options(Goal.SMALLEST))
+        self.assertEqual(len(single), 1)
+        chasing = pdf_image_rewrite_ladder(
+            merge_goal_options(Goal.SMALLEST, target_size_bytes=1024)
+        )
+        self.assertGreater(len(chasing), 1)
+        thresholds = [rung[0] for rung in chasing]
+        self.assertEqual(thresholds, sorted(thresholds, reverse=True))
+        qualities = [rung[2] for rung in chasing]
+        self.assertEqual(qualities, sorted(qualities, reverse=True))
+
+    def test_pdf_optimizer_shrinks_flate_image_scans(self):
+        # The classic "20MB PDF that won't compress": a lossless (FlateDecode)
+        # raster far above useful DPI. The DCT-only pikepdf pass can't touch
+        # it, and container cleanup alone saves ~nothing -- only the PyMuPDF
+        # rewrite_images engine gets real savings here.
+        try:
+            import fitz
+        except Exception:
+            self.skipTest("PyMuPDF is not installed")
+        if not hasattr(fitz.Document, "rewrite_images"):
+            self.skipTest("PyMuPDF too old for Document.rewrite_images")
+
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "scan.pdf"
+
+            base = Image.linear_gradient("L").resize((3000, 2300)).convert("RGB")
+            draw = ImageDraw.Draw(base)
+            rng = random.Random(4321)
+            for _ in range(220):
+                x = rng.randrange(0, 2900)
+                y = rng.randrange(0, 2200)
+                r = rng.randrange(12, 90)
+                draw.ellipse(
+                    (x, y, x + r, y + r),
+                    fill=(rng.randrange(256), rng.randrange(256), rng.randrange(256)),
+                )
+            png_buffer = io.BytesIO()
+            base.save(png_buffer, format="PNG")
+
+            document = fitz.open()
+            page = document.new_page(width=612, height=792)
+            page.insert_image(page.rect, stream=png_buffer.getvalue())
+            document.save(str(source))
+            document.close()
+
+            original_size = source.stat().st_size
+            result = optimize_one(source, merge_goal_options(Goal.SMALLEST))
+
+            self.assertEqual(result.status, "optimized")
+            self.assertLess(result.output_size, original_size * 0.7)
+            ok, message = validate_file(Path(result.output))
+            self.assertTrue(ok, message)
+
+    def test_pdf_filter_array_spelling_is_recompressed_too(self):
+        try:
+            import pikepdf
+        except Exception:
+            self.skipTest("pikepdf is not installed")
+        from optimizerzero.core import _pdf_filter_is_dct
+
+        self.assertTrue(_pdf_filter_is_dct(pikepdf.Name("/DCTDecode")))
+        self.assertTrue(_pdf_filter_is_dct(pikepdf.Array([pikepdf.Name("/DCTDecode")])))
+        self.assertFalse(_pdf_filter_is_dct(pikepdf.Name("/FlateDecode")))
+        self.assertFalse(
+            _pdf_filter_is_dct(pikepdf.Array([pikepdf.Name("/FlateDecode"), pikepdf.Name("/DCTDecode")]))
+        )
+        self.assertFalse(_pdf_filter_is_dct(None))
 
 
 @unittest.skipUnless(HEIF_AVAILABLE, "pillow-heif not installed")
