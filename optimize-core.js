@@ -404,6 +404,26 @@ function pdfjsReady() {
   return true;
 }
 
+// pdf.js's default canvas factory calls document.createElement for the
+// temporary canvases some render ops need (patterns, masks) -- in a worker
+// there is no document, so hand it OffscreenCanvas instead.
+class OffscreenCanvasFactory {
+  create(width, height) {
+    const canvas = new OffscreenCanvas(Math.max(1, width), Math.max(1, height));
+    return { canvas, context: canvas.getContext("2d") };
+  }
+  reset(pair, width, height) {
+    pair.canvas.width = Math.max(1, width);
+    pair.canvas.height = Math.max(1, height);
+  }
+  destroy(pair) {
+    pair.canvas.width = 0;
+    pair.canvas.height = 0;
+    pair.canvas = null;
+    pair.context = null;
+  }
+}
+
 // Render every page with pdf.js and rebuild the file as JPEG page images.
 // This is the only browser-side lever that reaches losslessly-stored
 // (FlateDecode) scans, CCITT faxes, and over-DPI rasters -- everything the
@@ -413,11 +433,17 @@ function pdfjsReady() {
 async function rasterizePdfDocument(sourceBytes, opts) {
   if (!pdfjsReady()) return null;
   const chasing = opts.targetSizeBytes && opts.targetSizeBytes > 0;
-  const dpis = chasing ? [150, 120, 96, 72] : [150];
+  // 최대 압축 (quality <= 0.5) starts at a lower page DPI -- the whole point
+  // of that level is trading visible quality for size.
+  const baseDpi = (opts.quality || 0.7) <= 0.5 ? 110 : 150;
+  const dpis = chasing ? [baseDpi, ...[120, 96, 72].filter((dpi) => dpi < baseDpi)] : [baseDpi];
   const jpegQuality = Math.min(0.9, Math.max(0.35, opts.quality || 0.7));
+  const inWorker = typeof document === "undefined";
+  const canvasFactory = inWorker ? new OffscreenCanvasFactory() : undefined;
   // pdf.js transfers the buffer it's handed to its worker -- pass a copy so
-  // the caller's bytes stay usable.
-  const doc = await pdfjsLib.getDocument({ data: sourceBytes.slice(0), isEvalSupported: false }).promise;
+  // the caller's bytes stay usable. canvasFactory is passed both here (v4
+  // API location) and to page.render (v3 location) so either build works.
+  const doc = await pdfjsLib.getDocument({ data: sourceBytes.slice(0), isEvalSupported: false, canvasFactory }).promise;
   try {
     let best = null;
     for (const dpi of dpis) {
@@ -437,7 +463,7 @@ async function rasterizePdfDocument(sourceBytes, opts) {
         const ctx = canvas.getContext("2d", { alpha: false });
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, width, height);
-        await page.render({ canvasContext: ctx, viewport }).promise;
+        await page.render({ canvasContext: ctx, viewport, canvasFactory }).promise;
         const blob = useOffscreen
           ? await canvas.convertToBlob({ type: "image/jpeg", quality: jpegQuality })
           : await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", jpegQuality));
@@ -485,9 +511,11 @@ async function optimizePdfFile(file, opts) {
         blob = new Blob([raster.bytes], { type: "application/pdf" });
         detail = `${pageCount}페이지 / 스캔형 재구성 ${raster.dpi}DPI (텍스트 선택 불가)`;
       }
-    } catch {
+    } catch (error) {
       // rasterization is opportunistic -- any failure falls back to the
-      // structure-preserving result computed above
+      // structure-preserving result computed above. Logged because a silent
+      // fallback here once hid a worker-only pdf.js loading failure.
+      console.warn("PDF 스캔형 재구성 실패, 구조 보존 결과 사용:", error);
     }
   }
   const accepted = outputAccepted(file.size, blob.size, opts);

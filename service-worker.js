@@ -1,4 +1,4 @@
-const CACHE_NAME = "optimizerzero-web-lite-v20";
+const CACHE_NAME = "optimizerzero-web-lite-v21";
 const APP_ASSETS = [
   "./",
   "./index.html",
@@ -49,7 +49,10 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   event.respondWith(
-    caches.match(event.request).then((cached) => {
+    // ignoreSearch: app scripts are requested with a ?vNN cache-buster (so
+    // uncontrolled/raced worker importScripts can't revive stale HTTP-cache
+    // bytes); inside the SW cache the version is already CACHE_NAME's job.
+    caches.match(event.request, { ignoreSearch: true }).then((cached) => {
       if (cached) return cached;
       return fetch(event.request)
         .then((response) => {
