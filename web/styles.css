@@ -37,9 +37,11 @@ body {
 }
 button, select, input { font: inherit; }
 .shell {
-  display: grid;
-  grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 18px;
+  max-width: 960px;
+  margin: 0 auto;
   min-height: 100vh;
   min-height: 100dvh;
   padding: max(14px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
@@ -237,7 +239,6 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .preview-button:hover { border-color: var(--accent-2); color: var(--accent-2); }
 @media (max-width: 860px) {
   .shell {
-    grid-template-columns: 1fr;
     gap: 12px;
     padding: 12px;
   }
