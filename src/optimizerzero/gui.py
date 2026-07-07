@@ -78,6 +78,7 @@ class OptimizerZeroApp(tk.Tk):
         self.min_savings_var = self._entry(limits, "Min savings %", "0", 8)
         self.max_size_var = self._entry(limits, "Max size", "", 10)
         self.target_size_var = self._entry(limits, "Target", "", 10)
+        self.max_dimension_var = self._entry(limits, "Max dimension px", "", 8)
         self.workers_var = self._entry(limits, f"CPU threads (auto={default_workers()})", "auto", 8)
         self.summary_var = tk.StringVar(value="0 files / 0 B saved")
         tk.Label(limits, textvariable=self.summary_var, fg="#9fb0c0", bg="#101418").pack(side="right")
@@ -174,6 +175,8 @@ class OptimizerZeroApp(tk.Tk):
             min_savings = float(self.min_savings_var.get() or "0")
             max_size = parse_size(self.max_size_var.get())
             target_size = parse_size(self.target_size_var.get())
+            max_dimension_text = self.max_dimension_var.get().strip()
+            max_dimension = int(max_dimension_text) if max_dimension_text else None
             workers_text = self.workers_var.get().strip().lower()
             workers = default_workers() if workers_text in {"", "auto"} else int(workers_text)
         except ValueError:
@@ -186,6 +189,7 @@ class OptimizerZeroApp(tk.Tk):
             min_savings_percent=min_savings,
             max_size_bytes=max_size,
             target_size_bytes=target_size,
+            max_dimension=max_dimension,
             workers=workers,
         )
         files_snapshot = list(self.files)
