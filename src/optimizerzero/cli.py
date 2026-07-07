@@ -75,6 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
     opt.add_argument("--quality", type=int, help="image quality 1-100 for JPEG/WEBP")
     opt.add_argument("--target-size", help="per-file target output size, e.g. 5MB")
     opt.add_argument("--max-dimension", type=int, help="cap image longest edge in pixels (extra lever once quality alone can't hit --target-size)")
+    opt.add_argument("--keep-metadata", action="store_true", help="re-attach EXIF (camera, date) to recompressed images; stripped by default for privacy")
     opt.add_argument("--workers", type=int, default=0, help="parallel local workers; 0 uses a safe CPU-based default")
     opt.add_argument("--supported-only", action="store_true", help="disable generic ZIP fallback for unknown file types")
 
@@ -184,6 +185,7 @@ def main(argv: list[str] | None = None) -> int:
         image_quality=args.quality,
         target_size_bytes=parse_size(args.target_size),
         max_dimension=args.max_dimension,
+        keep_metadata=args.keep_metadata,
         generic_fallback=not args.supported_only,
         workers=workers,
     )

@@ -71,6 +71,8 @@ class OptimizerZeroApp(tk.Tk):
         ttk.Checkbutton(actions, text="Recursive", variable=self.recursive_var).pack(side="left", padx=8)
         self.dry_run_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(actions, text="Dry Run", variable=self.dry_run_var).pack(side="left", padx=8)
+        self.keep_metadata_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(actions, text="Keep EXIF", variable=self.keep_metadata_var).pack(side="left", padx=8)
         self.run_button = ttk.Button(actions, text="Run", command=self.run)
         self.run_button.pack(side="right")
         limits = tk.Frame(self, bg="#101418")
@@ -190,6 +192,7 @@ class OptimizerZeroApp(tk.Tk):
             max_size_bytes=max_size,
             target_size_bytes=target_size,
             max_dimension=max_dimension,
+            keep_metadata=self.keep_metadata_var.get(),
             workers=workers,
         )
         files_snapshot = list(self.files)

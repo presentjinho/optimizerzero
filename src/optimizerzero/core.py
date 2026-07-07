@@ -70,7 +70,11 @@ class OptimizeOptions:
     in_place: bool = False
     allow_larger: bool = False
     dry_run: bool = False
-    keep_metadata: bool = True
+    # EXIF (including GPS) is stripped by default -- privacy-safe, and matches
+    # what recompression already did anyway before this flag did anything.
+    # Set True to explicitly re-attach EXIF (camera/date, orientation already
+    # baked into pixels by exif_transpose) to recompressed output.
+    keep_metadata: bool = False
     min_savings_percent: float = 0.0
     max_size_bytes: int | None = None
     loss_budget: LossBudget | None = None
@@ -493,6 +497,11 @@ def optimize_image_bytes(data: bytes, options: OptimizeOptions, target_size_byte
             original_format = image.format or "PNG"
             image = ImageOps.exif_transpose(image)
             image.load()
+            # exif_transpose() already baked any Orientation tag into the
+            # pixels and stripped it from this exif blob, so re-attaching it
+            # below can't cause a double-rotation in viewers that also honor
+            # Orientation.
+            preserved_exif = image.info.get("exif") if options.keep_metadata else None
             is_png = original_format.upper() == "PNG"
             if is_png:
                 # PNG's own ladder (lossless recompress, optionally palette
@@ -522,6 +531,8 @@ def optimize_image_bytes(data: bytes, options: OptimizeOptions, target_size_byte
                         candidate_image = resized
                         if out_format in {"JPEG", "HEIF"} and candidate_image.mode not in {"RGB", "L"}:
                             candidate_image = candidate_image.convert("RGB")
+                    if preserved_exif:
+                        save_args = {**save_args, "exif": preserved_exif}
                     out = io.BytesIO()
                     candidate_image.save(out, out_format, **save_args)
                     candidate = out.getvalue()

@@ -18,6 +18,7 @@ It is user-centered: start with one practical goal, then tune limits only when n
 - Batch limits for huge files, minimum saving percentage, and target size
 - Original files are preserved by default
 - Output is accepted only when it verifies and is smaller
+- EXIF (including GPS location) is stripped from recompressed images by default; `--keep-metadata` re-attaches camera/date tags for anyone who wants them. Desktop only -- the Web Lite app's Canvas-based recompression can't carry EXIF through at all, with or without this flag.
 
 ## Quick Start
 
@@ -67,6 +68,7 @@ Tune only when needed:
 - `--quality 1-100`: direct JPEG/WEBP quality control.
 - `--target-size 5MB`: keep only outputs that fit the target. When one quality attempt misses, OptimizerZero automatically retries down a quality ladder, then a resize ladder, until the target is hit or both run out.
 - `--max-dimension 1600`: cap an image's longest edge in pixels; applies unconditionally, independent of `--target-size`.
+- `--keep-metadata`: re-attach EXIF (camera model, date taken) to recompressed images. Off by default -- GPS location is EXIF too, so the safe default strips all of it.
 - `--min-savings-percent 1`: skip tiny wins.
 - `--max-size 150MB`: avoid heavy files in mixed folders.
 - `--workers 4`: use local CPU workers for multi-file jobs. Omit it for the safe automatic default.

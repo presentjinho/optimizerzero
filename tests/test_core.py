@@ -579,5 +579,66 @@ class PngQuantizeTests(unittest.TestCase):
                     self.assertNotEqual(saved.mode, "P")
 
 
+def make_jpeg_with_exif_bytes(size=(300, 150), orientation=6):
+    image = Image.new("RGB", size)
+    pixels = image.load()
+    for y in range(size[1]):
+        for x in range(size[0]):
+            pixels[x, y] = (x % 256, y % 256, (x + y) % 256)
+    exif = image.getexif()
+    if orientation is not None:
+        exif[0x0112] = orientation  # Orientation
+    exif[0x010F] = "TestCam"  # Make
+    exif[0x9003] = "2024:01:01 12:00:00"  # DateTimeOriginal
+    out = io.BytesIO()
+    image.save(out, "JPEG", quality=95, exif=exif.tobytes())
+    return out.getvalue()
+
+
+class MetadataTests(unittest.TestCase):
+    def test_metadata_is_stripped_by_default(self):
+        data = make_jpeg_with_exif_bytes()
+        result = optimize_image_bytes(data, merge_goal_options(Goal.SMALLEST))
+        with Image.open(io.BytesIO(result)) as image:
+            self.assertEqual(dict(image.getexif()), {})
+
+    def test_keep_metadata_preserves_camera_and_date_tags(self):
+        data = make_jpeg_with_exif_bytes()
+        options = merge_goal_options(Goal.SMALLEST, keep_metadata=True)
+        result = optimize_image_bytes(data, options)
+        with Image.open(io.BytesIO(result)) as image:
+            tags = dict(image.getexif())
+            self.assertEqual(tags.get(0x010F), "TestCam")
+            self.assertEqual(tags.get(0x9003), "2024:01:01 12:00:00")
+
+    def test_keep_metadata_does_not_double_rotate(self):
+        # Source is stored 300x150 with Orientation=6 (displays as 150x300).
+        # exif_transpose() bakes that rotation into pixels and drops the tag,
+        # so the recompressed output must already be 150x300 with no
+        # orientation tag left to make a viewer rotate it again.
+        data = make_jpeg_with_exif_bytes(size=(300, 150), orientation=6)
+        options = merge_goal_options(Goal.SMALLEST, keep_metadata=True)
+        result = optimize_image_bytes(data, options)
+        with Image.open(io.BytesIO(result)) as image:
+            self.assertEqual(image.size, (150, 300))
+            self.assertNotIn(0x0112, dict(image.getexif()))
+
+    def test_keep_metadata_threads_through_zip_container(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "photos.zip"
+            with zipfile.ZipFile(source, "w") as archive:
+                archive.writestr("a.jpg", make_jpeg_with_exif_bytes())
+            target = tmp_path / "out.zip"
+
+            from optimizerzero.core import optimize_zip_container
+
+            ok, message = optimize_zip_container(source, target, merge_goal_options(Goal.SMALLEST, keep_metadata=True))
+            self.assertTrue(ok, message)
+            with zipfile.ZipFile(target) as archive:
+                with Image.open(io.BytesIO(archive.read("a.jpg"))) as image:
+                    self.assertEqual(dict(image.getexif()).get(0x010F), "TestCam")
+
+
 if __name__ == "__main__":
     unittest.main()
