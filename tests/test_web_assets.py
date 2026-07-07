@@ -132,7 +132,7 @@ class WebAssetTests(unittest.TestCase):
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v18', worker)
+        self.assertIn('optimizerzero-web-lite-v19', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")
@@ -352,6 +352,16 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn(".ozero.pdf", core)
         self.assertNotIn("PDF web safe ZIP", core)
         self.assertIn("PDF browser-side rewrite", readme)
+
+    def test_large_input_options_exist_for_capable_machines(self):
+        # The 150MB ceiling was only ever a dropdown default, not an
+        # engineering limit -- capable desktop browsers handle 300-500MB.
+        # GB-range files stay desktop-app territory (whole-file-in-RAM
+        # engines), which the option labels should not promise.
+        html = self.read("index.html")
+        self.assertIn('<option value="300">', html)
+        self.assertIn('<option value="500">', html)
+        self.assertIn('<option value="75" selected>', html)
 
     def test_web_pdf_recompresses_common_real_world_image_variants(self):
         # Filter-array spelling and ICCBased-wrapped colorspaces are how most
