@@ -93,6 +93,7 @@ Most users should use goals instead of profiles.
 - when a target size is set, a miss retries down a quality ladder and then a resize ladder before giving up, same as the desktop app
 - multiple files compress in parallel across a Web Worker pool sized to the machine's CPU cores, with a live ETA during the run
 - queue rows can be removed one by one before rerunning
+- optimized image results get a before/after slider preview (drag or arrow keys) to check quality before downloading
 - ZIP/CBZ/EPUB/Office containers can recompress JPG/JPEG/WEBP/BMP/GIF entries in the browser when visual loss is allowed
 - damaged or unsupported image entries inside containers are kept original instead of failing the whole job
 - PDF pages are rewritten with pdf-lib (cleanup + object streams), and embedded JPEG images are recompressed too when the loss budget allows it

@@ -132,7 +132,7 @@ class WebAssetTests(unittest.TestCase):
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v13', worker)
+        self.assertIn('optimizerzero-web-lite-v14', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")
@@ -424,6 +424,26 @@ class WebAssetTests(unittest.TestCase):
         # otherwise every re-render after a run leaks one Object URL per row.
         occurrences = app.count("revokeTrackedBlobUrls();")
         self.assertGreaterEqual(occurrences, 2)
+
+    def test_web_before_after_preview_slider(self):
+        app = self.read("app.js")
+        html = self.read("index.html")
+        css = self.read("styles.css")
+
+        self.assertIn("function openPreview(file, result)", app)
+        self.assertIn("function closePreview()", app)
+        # only offer the preview for image results, and only once optimized
+        self.assertIn("result.status === \"optimized\" && result.blobUrl && imageExts.has(extOf(file))", app)
+        # the modal must be closed before URLs it references get revoked, or
+        # a mid-preview run/clear would leave it pointing at a dead blob URL
+        self.assertIn("closePreview();\n  revokeTrackedBlobUrls();", app)
+        self.assertIn('id="previewModal"', html)
+        self.assertIn('id="previewHandle"', html)
+        # a class selector unconditionally setting display would beat the
+        # [hidden] UA rule on specificity ties -- must have an explicit
+        # override or the modal shows on page load regardless of the
+        # hidden attribute (this exact bug shipped once already)
+        self.assertIn(".preview-modal[hidden] { display: none; }", css)
 
     def test_web_javascript_syntax(self):
         for script in ("app.js", "optimize-core.js", "worker.js", "service-worker.js"):
