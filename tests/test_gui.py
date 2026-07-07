@@ -30,7 +30,7 @@ class GuiSourceTests(unittest.TestCase):
         source = self.read_gui()
 
         self.assertIn("self.goal_var = tk.StringVar(value=Goal.SMART.value)", source)
-        self.assertIn('self.workers_var = self._entry(limits, "Workers", "auto", 8)', source)
+        self.assertIn('self.workers_var = self._entry(limits, f"CPU threads (auto={default_workers()})", "auto", 8)', source)
         self.assertIn("merge_goal_options(", source)
         self.assertNotIn("self.loss_budget_var", source)
         self.assertNotIn("self.quality_var", source)

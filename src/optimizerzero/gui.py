@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 import tkinter as tk
 import os
 from pathlib import Path
@@ -15,15 +16,30 @@ def default_workers() -> int:
     return max(1, min(4, cpu_count - 1 if cpu_count > 1 else 1))
 
 
+def format_duration(seconds: float) -> str:
+    seconds = max(0, int(round(seconds)))
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, seconds = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {seconds}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes}m"
+
+
 class OptimizerZeroApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("OptimizerZero")
         self.geometry("1080x700")
+        self.minsize(1080, 700)
         self.files: list[Path] = []
         self.results: list[OptimizeResult] = []
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.worker: threading.Thread | None = None
+        self.run_started_at: float = 0.0
+        self.run_total: int = 0
+        self.run_completed: int = 0
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -62,16 +78,25 @@ class OptimizerZeroApp(tk.Tk):
         self.min_savings_var = self._entry(limits, "Min savings %", "0", 8)
         self.max_size_var = self._entry(limits, "Max size", "", 10)
         self.target_size_var = self._entry(limits, "Target", "", 10)
-        self.workers_var = self._entry(limits, "Workers", "auto", 8)
+        self.workers_var = self._entry(limits, f"CPU threads (auto={default_workers()})", "auto", 8)
         self.summary_var = tk.StringVar(value="0 files / 0 B saved")
         tk.Label(limits, textvariable=self.summary_var, fg="#9fb0c0", bg="#101418").pack(side="right")
+        progress = tk.Frame(self, bg="#101418")
+        progress.pack(fill="x", padx=18, pady=(0, 8))
+        self.progress_var = tk.StringVar(value="")
+        tk.Label(progress, textvariable=self.progress_var, fg="#9fb0c0", bg="#101418").pack(side="left")
+        table_frame = tk.Frame(self)
+        table_frame.pack(fill="both", expand=True, padx=18, pady=8)
         cols = ("file", "type", "size", "status", "saved")
-        self.table = ttk.Treeview(self, columns=cols, show="headings")
-        for col, label, width in [("file", "File", 430), ("type", "Type", 70), ("size", "Size", 110), ("status", "Status", 300), ("saved", "Saved", 100)]:
+        self.table = ttk.Treeview(table_frame, columns=cols, show="headings")
+        for col, label, width in [("file", "File", 380), ("type", "Type", 70), ("size", "Size", 100), ("status", "Status", 360), ("saved", "Saved", 100)]:
             self.table.heading(col, text=label)
             self.table.column(col, width=width, anchor="w")
-        self.table.pack(fill="both", expand=True, padx=18, pady=8)
-        self.log = tk.Text(self, height=8, bg="#0b0f13", fg="#dbe7f3", insertbackground="#dbe7f3", relief="flat")
+        table_xscroll = ttk.Scrollbar(table_frame, orient="horizontal", command=self.table.xview)
+        self.table.configure(xscrollcommand=table_xscroll.set)
+        self.table.pack(side="top", fill="both", expand=True)
+        table_xscroll.pack(side="bottom", fill="x")
+        self.log = tk.Text(self, height=8, bg="#0b0f13", fg="#dbe7f3", insertbackground="#dbe7f3", relief="flat", wrap="word")
         self.log.pack(fill="x", padx=18, pady=(8, 16))
         self.log_line("Ready.")
 
@@ -80,6 +105,14 @@ class OptimizerZeroApp(tk.Tk):
         var = tk.StringVar(value=value)
         ttk.Entry(parent, textvariable=var, width=width).pack(side="left", padx=(8, 18))
         return var
+
+    def _eta_text(self) -> str:
+        if self.run_completed <= 0 or self.run_completed >= self.run_total:
+            return "estimating…"
+        elapsed = time.time() - self.run_started_at
+        avg_per_file = elapsed / self.run_completed
+        remaining = self.run_total - self.run_completed
+        return f"ETA {format_duration(avg_per_file * remaining)}"
 
     def log_line(self, text: str) -> None:
         self.log.insert("end", text + "\n")
@@ -111,6 +144,7 @@ class OptimizerZeroApp(tk.Tk):
         self.results = []
         self.refresh()
         self.summary_var.set("0 files / 0 B saved")
+        self.progress_var.set("")
 
     def set_running(self, running: bool) -> None:
         state = "disabled" if running else "normal"
@@ -156,6 +190,10 @@ class OptimizerZeroApp(tk.Tk):
         )
         files_snapshot = list(self.files)
         self.results = []
+        self.run_started_at = time.time()
+        self.run_total = len(files_snapshot)
+        self.run_completed = 0
+        self.progress_var.set(f"0 / {self.run_total}")
         self.set_running(True)
         self.worker = threading.Thread(target=self._run_worker, args=(files_snapshot, options), daemon=True)
         self.worker.start()
@@ -186,11 +224,15 @@ class OptimizerZeroApp(tk.Tk):
                 self.log_line(str(payload))
             elif event == "result":
                 self.results.append(payload)
+                self.run_completed += 1
+                self.progress_var.set(f"{self.run_completed} / {self.run_total} · {self._eta_text()}")
             elif event == "done":
                 saved_total = sum(max(0, result.saved_bytes) for result in self.results)
                 optimized = sum(1 for result in self.results if result.status == "optimized")
                 errors = sum(1 for result in self.results if result.status == "error")
                 self.summary_var.set(f"{optimized} optimized / {format_bytes(saved_total)} saved / {errors} errors")
+                elapsed = time.time() - self.run_started_at
+                self.progress_var.set(f"{self.run_completed} / {self.run_total} · done in {format_duration(elapsed)}")
                 self.log_line("Done.")
                 self.set_running(False)
                 return
