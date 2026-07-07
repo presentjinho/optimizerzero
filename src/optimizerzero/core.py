@@ -145,6 +145,23 @@ def extension_for_path(path: Path) -> str:
     return path.suffix.lower()
 
 
+IGNORABLE_ZIP_ENTRY_NAMES = {".ds_store", "thumbs.db", "desktop.ini"}
+
+
+def is_image_only_zip(path: Path) -> bool:
+    try:
+        with zipfile.ZipFile(path, "r") as archive:
+            names = [
+                info.filename for info in archive.infolist()
+                if not info.is_dir() and Path(info.filename).name.lower() not in IGNORABLE_ZIP_ENTRY_NAMES
+            ]
+            if not names:
+                return False
+            return all(Path(name).suffix.lower() in IMAGE_EXTS for name in names)
+    except Exception:
+        return False
+
+
 def output_suffix_for_path(path: Path) -> str:
     extension = extension_for_path(path)
     if extension == ".tar":
@@ -154,6 +171,11 @@ def output_suffix_for_path(path: Path) -> str:
         # format" would just be the same bytes back. PNG gets a genuine,
         # always-lossless win instead of leaving these permanently untouched.
         return ".png"
+    if extension == ".zip" and is_image_only_zip(path):
+        # A ZIP that's nothing but images is functionally a comic/photo
+        # archive already -- label it .cbz so comic/image readers recognize
+        # it, instead of leaving it looking like a generic archive.
+        return ".cbz"
     return extension if extension in SUPPORTED_EXTS else ".zip"
 
 

@@ -19,6 +19,7 @@ from optimizerzero.core import (
     dimension_ladder,
     discover_files,
     find_duplicate_files,
+    is_image_only_zip,
     merge_goal_options,
     move_file,
     optimize_image_bytes,
@@ -694,6 +695,70 @@ class UncompressedImageTests(unittest.TestCase):
             self.assertTrue(ok, message)
             with zipfile.ZipFile(target) as archive:
                 self.assertEqual(archive.read("page1.bmp"), bmp_bytes)
+
+
+def make_jpeg_bytes_simple(size=(300, 200), color=(100, 150, 200)):
+    out = io.BytesIO()
+    Image.new("RGB", size, color).save(out, "JPEG", quality=90)
+    return out.getvalue()
+
+
+class ZipToCbzTests(unittest.TestCase):
+    def test_image_only_zip_outputs_as_cbz(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "photos.zip"
+            with zipfile.ZipFile(source, "w") as archive:
+                archive.writestr("page1.jpg", make_jpeg_bytes_simple())
+                archive.writestr("page2.jpg", make_jpeg_bytes_simple())
+
+            self.assertEqual(output_suffix_for_path(source), ".cbz")
+
+            result = optimize_one(source, merge_goal_options(Goal.SMALLEST))
+            self.assertEqual(result.status, "optimized")
+            self.assertEqual(Path(result.output).suffix, ".cbz")
+
+    def test_mixed_content_zip_stays_zip(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "mixed.zip"
+            with zipfile.ZipFile(source, "w") as archive:
+                archive.writestr("page1.jpg", make_jpeg_bytes_simple())
+                archive.writestr("readme.txt", "hello")
+
+            self.assertEqual(output_suffix_for_path(source), ".zip")
+
+    def test_os_junk_files_do_not_block_cbz_detection(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "withjunk.zip"
+            with zipfile.ZipFile(source, "w") as archive:
+                archive.writestr("page1.jpg", make_jpeg_bytes_simple())
+                archive.writestr("Thumbs.db", b"junk")
+
+            self.assertEqual(output_suffix_for_path(source), ".cbz")
+
+    def test_non_zip_content_does_not_crash_detection(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "notazip.zip"
+            source.write_bytes(b"not a real zip")
+
+            self.assertFalse(is_image_only_zip(source))
+            self.assertEqual(output_suffix_for_path(source), ".zip")
+
+    def test_empty_and_dirs_only_zip_do_not_become_cbz(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            empty = tmp_path / "empty.zip"
+            with zipfile.ZipFile(empty, "w"):
+                pass
+            self.assertEqual(output_suffix_for_path(empty), ".zip")
+
+            dirs_only = tmp_path / "dirsonly.zip"
+            with zipfile.ZipFile(dirs_only, "w") as archive:
+                archive.writestr("folder/", "")
+            self.assertEqual(output_suffix_for_path(dirs_only), ".zip")
 
 
 if __name__ == "__main__":

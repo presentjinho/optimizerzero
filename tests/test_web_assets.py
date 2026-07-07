@@ -132,7 +132,7 @@ class WebAssetTests(unittest.TestCase):
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v14', worker)
+        self.assertIn('optimizerzero-web-lite-v15', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")
@@ -444,6 +444,17 @@ class WebAssetTests(unittest.TestCase):
         # override or the modal shows on page load regardless of the
         # hidden attribute (this exact bug shipped once already)
         self.assertIn(".preview-modal[hidden] { display: none; }", css)
+
+    def test_web_image_only_zip_becomes_cbz(self):
+        core = self.read("optimize-core.js")
+
+        self.assertIn("function isImageOnlyZipEntries(files)", core)
+        # only a plain .zip gets relabeled -- .cbz/.epub/office formats are
+        # already their own specific type and must not be touched
+        self.assertIn('fileExt === "zip" && isImageOnlyZipEntries(source.files)', core)
+        self.assertIn('.replace(/\\.[^.]+$/, ".ozero.cbz")', core)
+        # OS junk files (Thumbs.db etc.) alongside images shouldn't block detection
+        self.assertIn("IGNORABLE_ZIP_ENTRY_NAMES", core)
 
     def test_web_javascript_syntax(self):
         for script in ("app.js", "optimize-core.js", "worker.js", "service-worker.js"):

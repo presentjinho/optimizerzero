@@ -11,6 +11,7 @@ It is user-centered: start with one practical goal, then tune limits only when n
 - BMP, TIFF: converted to PNG on desktop (these formats have no compression of their own, so this is always a real, always-lossless win regardless of goal); archive entries with these extensions are left untouched since renaming them would break formats that reference embedded images by exact filename (DOCX/PPTX/XLSX/ODT/EPUB manifests). Web already handles BMP via its Canvas-based re-encode; TIFF has no browser decode support, so it falls back to the generic ZIP wrapper there.
 - HEIC/HEIF: optional image recompression on desktop with `pillow-heif` installed (`pip install "optimizerzero[heic]"`); the Web Lite browser app cannot decode HEIC (no browser support), so HEIC files there fall back to the generic ZIP wrapper
 - ZIP/CBZ/EPUB/Office/OpenDocument containers: format-preserving image entry optimization when useful
+- A plain ZIP whose entries are all images (ignoring OS junk like Thumbs.db/.DS_Store) is output as `.cbz` instead of `.zip` -- it's functionally a comic/photo archive already, so it gets the extension comic/image readers actually recognize. Mixed-content ZIPs, and anything already `.cbz`/EPUB/Office, are untouched.
 - Generic files: verified `.ozero.zip` fallback when no format-specific optimizer exists
 - Analyze folders by type, size, and optional validity
 - Find byte-identical duplicate files before optimizing

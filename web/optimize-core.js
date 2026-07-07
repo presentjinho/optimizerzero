@@ -7,6 +7,7 @@ const pdfExts = new Set(["pdf"]);
 const archiveImageExts = new Set(["jpg", "jpeg", "webp", "bmp", "gif", "png"]);
 const imageOptimizableArchiveExts = new Set(["zip", "cbz", "epub", "docx", "pptx", "xlsx", "odt", "ods", "odp", "jar"]);
 const RECOMPRESSABLE_PDF_COLORSPACES = new Set(["DeviceRGB", "DeviceGray"]);
+const IGNORABLE_ZIP_ENTRY_NAMES = new Set([".ds_store", "thumbs.db", "desktop.ini"]);
 
 function extOfName(name) {
   return (name.split(".").pop() || "").toLowerCase();
@@ -263,6 +264,16 @@ async function maybeOptimizeArchiveEntry(fileExt, cleanName, data, opts) {
   return { blob: result.blob, changed: true };
 }
 
+// A plain ZIP that's nothing but images is functionally a comic/photo
+// archive already -- mirrors desktop's is_image_only_zip().
+function isImageOnlyZipEntries(files) {
+  const names = Object.keys(files)
+    .filter((name) => !files[name].dir)
+    .filter((name) => !IGNORABLE_ZIP_ENTRY_NAMES.has(name.split("/").pop().toLowerCase()));
+  if (!names.length) return false;
+  return names.every((name) => archiveImageExts.has(extOfName(name)));
+}
+
 async function optimizeArchive(file, opts) {
   if (typeof JSZip === "undefined") throw new Error("압축 엔진을 불러오지 못했습니다.");
   const fileExt = extOf(file);
@@ -288,7 +299,9 @@ async function optimizeArchive(file, opts) {
   });
   const accepted = outputAccepted(file.size, blob.size, opts);
   if (!accepted.ok) return { status: "skipped", message: accepted.message };
-  const outName = file.name.replace(/(\.[^.]+)$/, ".ozero$1");
+  const outName = fileExt === "zip" && isImageOnlyZipEntries(source.files)
+    ? file.name.replace(/\.[^.]+$/, ".ozero.cbz")
+    : file.name.replace(/(\.[^.]+)$/, ".ozero$1");
   const detailParts = imageEntriesOptimized ? [`이미지 ${imageEntriesOptimized}개 재압축`] : ["컨테이너만 재압축"];
   if (imageEntriesSkipped) detailParts.push(`이미지 ${imageEntriesSkipped}개는 원본 유지`);
   return { status: "optimized", blob, outName, saved: accepted.saved, message: detailParts.join(" / ") };
