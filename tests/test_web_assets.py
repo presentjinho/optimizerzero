@@ -99,6 +99,40 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("\ucd5c\ub300 \uc555\ucd95", app)
         self.assertIn('el.strength.addEventListener("input", applyStrength)', app)
 
+    def test_worker_script_urls_are_version_busted_in_sync(self):
+        # Worker importScripts and Worker() spawn URLs carry a ?vNN buster:
+        # without it, a worker created before the service worker takes
+        # control (or with no SW at all) loads whatever stale bytes the
+        # browser HTTP cache still holds -- which shipped as "rasterize
+        # silently never runs in the pool". The buster must stay in lockstep
+        # with CACHE_NAME or it stops doing anything.
+        sw = self.read("service-worker.js")
+        worker = self.read("worker.js")
+        app = self.read("app.js")
+        version = re.search(r'optimizerzero-web-lite-(v\d+)', sw).group(1)
+        self.assertGreaterEqual(worker.count(f"?{version}"), 5)
+        self.assertGreaterEqual(app.count(f"?{version}"), 3)
+        for text, name in ((worker, "worker.js"), (app, "app.js")):
+            stray = set(re.findall(r"\?v\d+", text)) - {f"?{version}"}
+            self.assertFalse(stray, f"{name} has mismatched versions: {stray}")
+        self.assertIn("ignoreSearch: true", sw)
+
+    def test_strength_curve_is_wide_and_monotonic(self):
+        # The slider promises a spectrum: 나노 ~ visually original, 최대 ~
+        # as small as usable. Every knob must move monotonically along it or
+        # some level is pointless (a stronger level compressing less than a
+        # weaker one shipped once as the 25MB-limit inversion).
+        app = self.read("app.js")
+        levels_block = app.split("const STRENGTH_LEVELS = [", 1)[1].split("];", 1)[0]
+        qualities = [int(m) for m in re.findall(r"quality: (\d+)", levels_block)]
+        self.assertEqual(len(qualities), 7)
+        self.assertEqual(qualities, sorted(qualities, reverse=True))
+        self.assertGreaterEqual(qualities[0], 95)
+        self.assertLessEqual(qualities[-1], 50)
+        dims = [int(m) for m in re.findall(r"maxDimension: (\d+)", levels_block)]
+        set_dims = [d for d in dims if d]
+        self.assertEqual(set_dims, sorted(set_dims, reverse=True))
+
     def test_nano_level_actually_recompresses_instead_of_a_no_op(self):
         # Level 1 (나노 압축) used to set lossBudget "none", which makes
         # optimizeImageFile() skip recompression outright -- a loose image file at
@@ -132,7 +166,7 @@ class WebAssetTests(unittest.TestCase):
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v20', worker)
+        self.assertIn('optimizerzero-web-lite-v21', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")
@@ -387,6 +421,12 @@ class WebAssetTests(unittest.TestCase):
         # swallowed or it leaks junk into the pool protocol.
         self.assertIn("./vendor/pdfjs/pdf.worker.min.js", worker)
         self.assertIn("self.postMessage = () => {};", worker)
+        # pdf.js render needs a canvas factory in workers -- its default one
+        # calls document.createElement for temp canvases (patterns/masks) and
+        # only SOME content triggers that path, so the breakage was
+        # intermittent: simple pages rendered, alpha-heavy pages failed.
+        self.assertIn("class OffscreenCanvasFactory", core)
+        self.assertIn("viewport, canvasFactory", core)
         self.assertIn("./vendor/pdfjs/pdf.min.js", sw)
         self.assertIn("./vendor/pdfjs/pdf.worker.min.js", sw)
         # a new SW version must not re-cache stale bytes from the HTTP cache
@@ -414,7 +454,7 @@ class WebAssetTests(unittest.TestCase):
         worker = self.read("worker.js")
 
         self.assertIn("navigator.hardwareConcurrency", app)
-        self.assertIn("function runWithWorkerPool(files, opts, onDone, workerScript = \"./worker.js\", workerOptions, onFailure)", app)
+        self.assertIn("function runWithWorkerPool(files, opts, onDone, workerScript = \"./worker.js?", app)
         self.assertIn("new Worker(workerScript, workerOptions)", app)
         self.assertIn("function runSequentialFallback(files, opts, onDone)", app)
         self.assertIn("importScripts(", worker)
@@ -427,7 +467,7 @@ class WebAssetTests(unittest.TestCase):
         avif_jxl_worker = self.read("avif-jxl-worker.js")
 
         self.assertIn("function runWithCodecRouting(files, opts, onDone)", app)
-        self.assertIn('"./avif-jxl-worker.js", { type: "module" }', app)
+        self.assertIn('"./avif-jxl-worker.js?v', app)
         self.assertIn("codec: selectedCodec()", app)
         # "auto" (the default codec) must run the AVIF engine but fall a
         # single file back to WebP on a hard encode failure rather than
