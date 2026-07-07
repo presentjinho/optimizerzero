@@ -32,7 +32,8 @@ ZIP_CONTAINER_EXTS = {".zip", ".cbz", ".epub", ".docx", ".pptx", ".xlsx", ".odt"
 TAR_EXTS = {".tar", ".tgz", ".tar.gz", ".tbz2", ".tar.bz2", ".txz", ".tar.xz"}
 ARCHIVE_EXTS = ZIP_CONTAINER_EXTS | TAR_EXTS
 HEIF_EXTS = {".heic", ".heif"}
-IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"} | (HEIF_EXTS if HEIF_AVAILABLE else set())
+UNCOMPRESSED_IMAGE_EXTS = {".bmp", ".tif", ".tiff"}
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"} | UNCOMPRESSED_IMAGE_EXTS | (HEIF_EXTS if HEIF_AVAILABLE else set())
 PDF_EXTS = {".pdf"}
 SUPPORTED_EXTS = ARCHIVE_EXTS | IMAGE_EXTS | PDF_EXTS
 IMAGE_ARCHIVE_EXTS = {".zip", ".cbz"}
@@ -148,6 +149,11 @@ def output_suffix_for_path(path: Path) -> str:
     extension = extension_for_path(path)
     if extension == ".tar":
         return ".tar.gz"
+    if extension in UNCOMPRESSED_IMAGE_EXTS:
+        # BMP/TIFF have no real compression of their own; recompressing "in
+        # format" would just be the same bytes back. PNG gets a genuine,
+        # always-lossless win instead of leaving these permanently untouched.
+        return ".png"
     return extension if extension in SUPPORTED_EXTS else ".zip"
 
 
@@ -502,7 +508,11 @@ def optimize_image_bytes(data: bytes, options: OptimizeOptions, target_size_byte
             # below can't cause a double-rotation in viewers that also honor
             # Orientation.
             preserved_exif = image.info.get("exif") if options.keep_metadata else None
-            is_png = original_format.upper() == "PNG"
+            # BMP/TIFF have no compression of their own -- recompressing "in
+            # format" is a no-op. Route them through PNG's ladder instead so
+            # they get a genuine, always-available lossless win rather than
+            # being silently skipped every time regardless of goal.
+            is_png = original_format.upper() in {"PNG", "BMP", "TIFF"}
             if is_png:
                 # PNG's own ladder (lossless recompress, optionally palette
                 # quantization) -- quality_ladder()'s 1-100 JPEG/WEBP/HEIF
@@ -524,13 +534,17 @@ def optimize_image_bytes(data: bytes, options: OptimizeOptions, target_size_byte
                             continue
                         out_format, save_args = "PNG", {"optimize": True}
                     else:
-                        save = image_save_args(original_format, quality)
+                        save = image_save_args("PNG" if is_png else original_format, quality)
                         if save is None:
                             continue
                         out_format, save_args = save
                         candidate_image = resized
                         if out_format in {"JPEG", "HEIF"} and candidate_image.mode not in {"RGB", "L"}:
                             candidate_image = candidate_image.convert("RGB")
+                        elif out_format == "PNG" and candidate_image.mode not in {"1", "L", "LA", "P", "RGB", "RGBA"}:
+                            # BMP/TIFF (and exotic TIFF modes like CMYK) need
+                            # a mode PNG can actually encode.
+                            candidate_image = candidate_image.convert("RGBA" if "A" in candidate_image.mode else "RGB")
                     if preserved_exif:
                         save_args = {**save_args, "exif": preserved_exif}
                     out = io.BytesIO()
@@ -563,7 +577,13 @@ def optimize_zip_container(source: Path, target: Path, options: OptimizeOptions)
             compress_type = zipfile.ZIP_DEFLATED
             if source.suffix.lower() == ".epub" and name == "mimetype":
                 compress_type = zipfile.ZIP_STORED
-            if source.suffix.lower() in IMAGE_OPTIMIZABLE_CONTAINER_EXTS and Path(name).suffix.lower() in IMAGE_EXTS:
+            entry_suffix = Path(name).suffix.lower()
+            # BMP/TIFF recompress to PNG bytes (see optimize_image_bytes), but
+            # an archive entry's name/extension can't change here without
+            # breaking formats that reference it by exact filename internally
+            # (DOCX/PPTX/XLSX/ODT/EPUB manifests) -- so those two stay
+            # untouched inside containers, standalone files only.
+            if source.suffix.lower() in IMAGE_OPTIMIZABLE_CONTAINER_EXTS and entry_suffix in IMAGE_EXTS - UNCOMPRESSED_IMAGE_EXTS:
                 optimized = optimize_image_bytes(data, options, options.target_size_bytes)
                 if optimized is not None:
                     data = optimized

@@ -24,6 +24,8 @@ from optimizerzero.core import (
     optimize_image_bytes,
     optimize_many,
     optimize_one,
+    optimize_zip_container,
+    output_suffix_for_path,
     parse_size,
     png_quantize_ladder,
     quality_ladder,
@@ -631,13 +633,67 @@ class MetadataTests(unittest.TestCase):
                 archive.writestr("a.jpg", make_jpeg_with_exif_bytes())
             target = tmp_path / "out.zip"
 
-            from optimizerzero.core import optimize_zip_container
-
             ok, message = optimize_zip_container(source, target, merge_goal_options(Goal.SMALLEST, keep_metadata=True))
             self.assertTrue(ok, message)
             with zipfile.ZipFile(target) as archive:
                 with Image.open(io.BytesIO(archive.read("a.jpg"))) as image:
                     self.assertEqual(dict(image.getexif()).get(0x010F), "TestCam")
+
+
+def make_bmp_bytes(size=(400, 300)):
+    image = Image.new("RGB", size, (200, 100, 50))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([50, 50, size[0] - 50, size[1] - 50], fill=(10, 10, 10))
+    out = io.BytesIO()
+    image.save(out, "BMP")
+    return out.getvalue()
+
+
+class UncompressedImageTests(unittest.TestCase):
+    def test_output_suffix_swaps_bmp_and_tiff_to_png(self):
+        self.assertEqual(output_suffix_for_path(Path("photo.bmp")), ".png")
+        self.assertEqual(output_suffix_for_path(Path("scan.tiff")), ".png")
+        self.assertEqual(output_suffix_for_path(Path("scan.tif")), ".png")
+
+    def test_bmp_compresses_losslessly_even_under_the_safest_goal(self):
+        data = make_bmp_bytes()
+        result = optimize_image_bytes(data, merge_goal_options(Goal.QUALITY))
+        self.assertIsNotNone(result)
+        self.assertLess(len(result), len(data))
+        with Image.open(io.BytesIO(result)) as image:
+            self.assertEqual(image.format, "PNG")
+
+    def test_standalone_bmp_file_becomes_a_verified_png(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            source = tmp_path / "photo.bmp"
+            source.write_bytes(make_bmp_bytes())
+
+            result = optimize_one(source, merge_goal_options(Goal.QUALITY))
+
+            self.assertEqual(result.status, "optimized")
+            self.assertEqual(Path(result.output).suffix, ".png")
+            ok, message = validate_file(Path(result.output))
+            self.assertTrue(ok, message)
+
+    def test_bmp_entry_inside_a_zip_is_left_untouched(self):
+        # Renaming an archive entry's extension here would break formats
+        # that reference embedded images by exact filename internally
+        # (DOCX/PPTX/XLSX/ODT/EPUB manifests), so BMP/TIFF entries inside
+        # containers are skipped rather than converted.
+        with tempfile.TemporaryDirectory() as raw:
+            tmp_path = Path(raw)
+            bmp_bytes = make_bmp_bytes()
+            source = tmp_path / "photos.cbz"
+            with zipfile.ZipFile(source, "w") as archive:
+                archive.writestr("page1.bmp", bmp_bytes)
+            target = tmp_path / "out.cbz"
+
+            ok, message = optimize_zip_container(source, target, merge_goal_options(Goal.SMALLEST))
+
+            self.assertTrue(ok, message)
+            with zipfile.ZipFile(target) as archive:
+                self.assertEqual(archive.read("page1.bmp"), bmp_bytes)
 
 
 if __name__ == "__main__":
