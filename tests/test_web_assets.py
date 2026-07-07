@@ -132,7 +132,7 @@ class WebAssetTests(unittest.TestCase):
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v12', worker)
+        self.assertIn('optimizerzero-web-lite-v13', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")
@@ -288,11 +288,38 @@ class WebAssetTests(unittest.TestCase):
     def test_web_keeps_archive_entry_when_image_recompression_fails(self):
         core = self.read("optimize-core.js")
 
-        self.assertIn("try {", core)
-        self.assertIn("({ blob: optimized } = await recompressImage(data, mimeType, opts.quality, opts.maxDimension))", core)
-        self.assertIn("return { blob: data, changed: false, skipped: true }", core)
+        self.assertIn("const result = await recompressImageWithLadder(data, opts, mimeType)", core)
+        self.assertIn("if (!result || !result.blob) return { blob: data, changed: false, skipped: true }", core)
         self.assertIn("imageEntriesSkipped", core)
         self.assertIn("이미지 ${imageEntriesSkipped}개는 원본 유지", core)
+
+    def test_web_chases_target_size_with_quality_ladder(self):
+        core = self.read("optimize-core.js")
+
+        self.assertIn("function qualityLadder(opts)", core)
+        self.assertIn("async function recompressImageWithLadder(blob, opts, mimeType)", core)
+        # no target size -> single predictable rung, same as before this feature
+        self.assertIn("if (!opts.targetSizeBytes || opts.targetSizeBytes <= 0) return [chosen];", core)
+        # every recompression path (standalone images, archive entries, PDF
+        # embedded images) must go through the shared ladder, not a lone shot
+        self.assertIn("await recompressImageWithLadder(file, opts,", core)
+        self.assertIn("await recompressImageWithLadder(data, opts, mimeType)", core)
+        self.assertIn("await recompressImageWithLadder(\n      new Blob([sourceBytes]", core)
+
+    def test_web_falls_back_to_resizing_when_quality_alone_cannot_hit_a_target(self):
+        core = self.read("optimize-core.js")
+        worker = self.read("avif-jxl-worker.js")
+
+        for source in (core, worker):
+            self.assertIn("function dimensionLadder(opts)", source)
+            # no target size -> single predictable cap, same as before this feature
+            self.assertIn("if (!opts.targetSizeBytes || opts.targetSizeBytes <= 0", source)
+        # WebP path nests the dimension ladder around the quality ladder
+        self.assertIn("for (const maxDimension of dimensionLadder(opts)) {", core)
+        self.assertIn("for (const quality of qualityLadder(opts)) {", core)
+        # AVIF/JXL module worker mirrors the same two-lever retry
+        self.assertIn("for (const maxDimension of dimensionLadder(opts)) {", worker)
+        self.assertIn("for (const quality of qualityLadder(opts)) {", worker)
 
     def test_web_skips_recompression_for_animated_images(self):
         core = self.read("optimize-core.js")
