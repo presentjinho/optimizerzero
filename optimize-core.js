@@ -323,6 +323,37 @@ async function optimizeGenericFile(file, opts) {
   return { status: "optimized", blob, outName, saved: accepted.saved, message: "일반 ZIP 압축" };
 }
 
+function pdfFilterIsDct(filter, filterDct) {
+  if (filter === filterDct) return true;
+  // /Filter [/DCTDecode] -- array spelling of the same thing. Common in
+  // real-world PDFs and previously skipped for no good reason.
+  return filter instanceof PDFLib.PDFArray && filter.size() === 1 && filter.lookup(0) === filterDct;
+}
+
+function pdfColorSpaceIsRecompressable(colorSpace) {
+  const { PDFName, PDFArray } = PDFLib;
+  if (colorSpace instanceof PDFName) {
+    return RECOMPRESSABLE_PDF_COLORSPACES.has(colorSpace.asString().slice(1));
+  }
+  // [/ICCBased <stream>] wrapping plain RGB/Gray is how most exporters spell
+  // colorspaces. The browser's JPEG decode handles the profile, and we
+  // re-encode to the same channel count, so these are safe to recompress.
+  if (colorSpace instanceof PDFArray && colorSpace.size() >= 2 && colorSpace.lookup(0) === PDFName.of("ICCBased")) {
+    const iccStream = colorSpace.lookup(1);
+    const iccDict = iccStream && iccStream.dict;
+    if (!iccDict) return false;
+    const alternate = iccDict.lookup(PDFName.of("Alternate"));
+    if (alternate instanceof PDFName) {
+      return RECOMPRESSABLE_PDF_COLORSPACES.has(alternate.asString().slice(1));
+    }
+    const components = iccDict.lookup(PDFName.of("N"));
+    if (components && typeof components.asNumber === "function") {
+      return components.asNumber() === 1 || components.asNumber() === 3;
+    }
+  }
+  return false;
+}
+
 async function recompressPdfImages(pdfDoc, opts) {
   if (opts.lossBudget === "none") return 0;
   const { PDFName, PDFRawStream, PDFNumber } = PDFLib;
@@ -333,10 +364,9 @@ async function recompressPdfImages(pdfDoc, opts) {
     if (!(obj instanceof PDFRawStream)) continue;
     const dict = obj.dict;
     if (dict.lookup(PDFName.of("Subtype")) !== subtypeImage) continue;
-    if (dict.lookup(PDFName.of("Filter")) !== filterDct) continue;
+    if (!pdfFilterIsDct(dict.lookup(PDFName.of("Filter")), filterDct)) continue;
     if (dict.lookup(PDFName.of("Decode"))) continue;
-    const colorSpace = dict.lookup(PDFName.of("ColorSpace"));
-    if (!(colorSpace instanceof PDFName) || !RECOMPRESSABLE_PDF_COLORSPACES.has(colorSpace.asString().slice(1))) continue;
+    if (!pdfColorSpaceIsRecompressable(dict.lookup(PDFName.of("ColorSpace")))) continue;
     const sourceBytes = obj.getContents();
     // There's no meaningful per-image target size inside a PDF, so each
     // embedded image chases the whole file's target -- conservative, but if
@@ -353,6 +383,13 @@ async function recompressPdfImages(pdfDoc, opts) {
     // makes viewers decode the JPEG against the wrong sample count.
     dict.set(PDFName.of("Width"), PDFNumber.of(recompressed.width));
     dict.set(PDFName.of("Height"), PDFNumber.of(recompressed.height));
+    // Canvas re-encode always emits an 8-bit 3-channel sRGB JPEG, whatever
+    // the source was (gray, ICC-wrapped, 16-bit). Normalize the dict to the
+    // data we actually wrote, and drop params that described the old stream.
+    dict.set(PDFName.of("ColorSpace"), PDFName.of("DeviceRGB"));
+    dict.set(PDFName.of("BitsPerComponent"), PDFNumber.of(8));
+    dict.set(PDFName.of("Filter"), filterDct);
+    dict.delete(PDFName.of("DecodeParms"));
     pdfDoc.context.assign(ref, PDFRawStream.of(dict, newBytes));
     recompressedCount += 1;
   }

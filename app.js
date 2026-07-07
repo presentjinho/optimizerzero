@@ -45,8 +45,8 @@ const STRENGTH_LEVELS = [
   { label: "가벼운 압축", profile: "balanced", lossBudget: "low", quality: 90, targetSize: 0, minSavings: 1, limit: 100, maxDimension: 0, message: "가벼운 압축: 화질 우선, 절감은 보너스." },
   { label: "기본 압축", profile: "balanced", lossBudget: "medium", quality: 85, targetSize: 0, minSavings: 1, limit: 75, maxDimension: 0, message: "기본 압축: 화질과 용량의 균형 (추천)." },
   { label: "강한 압축", profile: "balanced", lossBudget: "medium", quality: 78, targetSize: 25, minSavings: 1, limit: 75, maxDimension: 3200, message: "강한 압축: 용량을 더 줄이고 화질은 약간 양보. 과도하게 큰 이미지는 3200px로 축소." },
-  { label: "강력 압축", profile: "strong", lossBudget: "high", quality: 70, targetSize: 10, minSavings: 3, limit: 25, maxDimension: 2400, message: "강력 압축: 용량 우선, 결과 확인 후 사용. 큰 이미지는 2400px로 축소." },
-  { label: "최대 압축", profile: "strong", lossBudget: "high", quality: 60, targetSize: 5, minSavings: 3, limit: 25, maxDimension: 1600, message: "최대 압축: 용량 최우선. 화질은 알아볼 수 있는 선까지만 낮추고, 큰 이미지는 1600px로 축소." },
+  { label: "강력 압축", profile: "strong", lossBudget: "high", quality: 70, targetSize: 10, minSavings: 3, limit: 75, maxDimension: 2400, message: "강력 압축: 용량 우선, 결과 확인 후 사용. 큰 이미지는 2400px로 축소." },
+  { label: "최대 압축", profile: "strong", lossBudget: "high", quality: 60, targetSize: 5, minSavings: 3, limit: 75, maxDimension: 1600, message: "최대 압축: 용량 최우선. 화질은 알아볼 수 있는 선까지만 낮추고, 큰 이미지는 1600px로 축소." },
 ];
 
 function currentLevel() {
