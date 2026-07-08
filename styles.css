@@ -262,6 +262,9 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   letter-spacing: 0;
 }
 .file-group-header:first-child { margin-top: 0; }
+.help-body { padding: 0 12px 12px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.help-body p { margin: 0 0 10px; }
+.help-body b { color: var(--text); }
 @media (max-width: 860px) {
   .shell {
     gap: 12px;

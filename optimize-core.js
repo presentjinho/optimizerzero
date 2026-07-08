@@ -250,18 +250,28 @@ function canRecompressArchiveImages(fileExt, opts) {
   return opts.lossBudget !== "none" && imageOptimizableArchiveExts.has(fileExt);
 }
 
+// Plain zip/cbz entries are referenced by nothing but the reader's eyes, so
+// they can be CONVERTED to WebP (extension renamed to match) -- the same
+// trick comic-archive optimizers use, and a far bigger win than re-encoding
+// a JPEG as a JPEG. DOCX/EPUB/Office are excluded: their internal XML
+// manifests reference images by exact filename, so entries there keep their
+// original format and name.
+const RENAMEABLE_ARCHIVE_EXTS = new Set(["zip", "cbz"]);
+
 async function maybeOptimizeArchiveEntry(fileExt, cleanName, data, opts) {
   const entryExt = extOfName(cleanName);
   if (!canRecompressArchiveImages(fileExt, opts) || !archiveImageExts.has(entryExt)) {
-    return { blob: data, changed: false };
+    return { blob: data, name: cleanName, changed: false };
   }
   if (await isUnsafeToRecompress(entryExt, data)) {
-    return { blob: data, changed: false, skipped: true };
+    return { blob: data, name: cleanName, changed: false, skipped: true };
   }
-  const mimeType = imageMimeForExt(entryExt);
+  const canRename = RENAMEABLE_ARCHIVE_EXTS.has(fileExt) && entryExt !== "webp";
+  const mimeType = canRename ? "image/webp" : imageMimeForExt(entryExt);
   const result = await recompressImageWithLadder(data, opts, mimeType);
-  if (!result || !result.blob) return { blob: data, changed: false, skipped: true };
-  return { blob: result.blob, changed: true };
+  if (!result || !result.blob) return { blob: data, name: cleanName, changed: false, skipped: true };
+  const name = canRename ? cleanName.replace(/\.[^.]+$/, ".webp") : cleanName;
+  return { blob: result.blob, name, changed: true };
 }
 
 // A plain ZIP that's nothing but images is functionally a comic/photo
@@ -289,7 +299,7 @@ async function optimizeArchive(file, opts) {
     imageEntriesOptimized += entryResult.changed ? 1 : 0;
     imageEntriesSkipped += entryResult.skipped ? 1 : 0;
     const compression = fileExt === "epub" && cleanName === "mimetype" ? "STORE" : "DEFLATE";
-    output.file(cleanName, entryResult.blob, { compression });
+    output.file(entryResult.name, entryResult.blob, { compression });
   }
   const blob = await output.generateAsync({
     type: "blob",
@@ -546,13 +556,22 @@ async function optimizePdfFile(file, opts) {
   let blob = new Blob([outputBytes], { type: "application/pdf" });
   let detail = recompressedImages ? `${pageCount}페이지 / 이미지 ${recompressedImages}개 재압축` : `${pageCount}페이지`;
   let rasterState = "below-level";
-  if (opts.lossBudget === "high") {
+  // 강력/최대 (high): rasterize whenever it wins. 기본/강함 (medium): users
+  // shouldn't need to find the advanced panel to shrink a scan PDF -- try it
+  // automatically too, but only adopt a DRAMATIC win (>=60% smaller), since
+  // losing text selection at the default level needs real justification.
+  const rasterBudget = opts.lossBudget === "high" ? "high" : opts.lossBudget === "medium" ? "medium" : null;
+  if (rasterBudget) {
     try {
       const raster = await rasterizePdfDocument(sourceBytes, opts);
-      if (raster && raster.pageCount === pageCount && raster.bytes.length < blob.size) {
+      const winsEnough = raster && raster.pageCount === pageCount
+        && (rasterBudget === "high" ? raster.bytes.length < blob.size : raster.bytes.length < blob.size * 0.4);
+      if (winsEnough) {
         blob = new Blob([raster.bytes], { type: "application/pdf" });
         detail = `${pageCount}페이지 / 스캔형 재구성 ${raster.dpi}DPI (텍스트 선택 불가)`;
         rasterState = "used";
+      } else if (raster && raster.bytes.length < blob.size) {
+        rasterState = "modest";
       } else {
         rasterState = raster ? "larger" : "unavailable";
       }
@@ -570,11 +589,13 @@ async function optimizePdfFile(file, opts) {
     // ask a human what it means.
     const hint = rasterState === "below-level"
       ? " · 강력/최대 레벨은 페이지를 이미지로 재구성해 스캔 PDF를 크게 줄일 수 있습니다."
-      : rasterState === "larger"
-        ? " · 페이지를 이미지로 재구성해봤지만 오히려 커집니다(텍스트 위주 PDF). 이 파일은 이미 작게 저장되어 있습니다."
-        : rasterState === "unavailable"
-          ? " · 페이지 재구성 엔진을 사용할 수 없었습니다. 새로고침 후 다시 시도해보세요."
-          : ` · 페이지 재구성 중 오류가 났습니다 (${rasterState}). 데스크탑 앱이 더 안정적입니다.`;
+      : rasterState === "modest"
+        ? " · 페이지 재구성으로 조금 더 줄일 수 있습니다 — 강력/최대 레벨에서는 그 결과를 그대로 채택합니다."
+        : rasterState === "larger"
+          ? " · 페이지를 이미지로 재구성해봤지만 오히려 커집니다(텍스트 위주 PDF). 이 파일은 이미 작게 저장되어 있습니다."
+          : rasterState === "unavailable"
+            ? " · 페이지 재구성 엔진을 사용할 수 없었습니다. 새로고침 후 다시 시도해보세요."
+            : ` · 페이지 재구성 중 오류가 났습니다 (${rasterState}). 데스크탑 앱이 더 안정적입니다.`;
     return { status: "skipped", message: `${accepted.message} (${detail})${hint}` };
   }
   const outName = file.name.replace(/(\.[^.]+)?$/, ".ozero.pdf");
