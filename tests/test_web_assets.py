@@ -99,6 +99,31 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("\ucd5c\ub300 \uc555\ucd95", app)
         self.assertIn('el.strength.addEventListener("input", applyStrength)', app)
 
+    def test_zip_cbz_entries_convert_to_webp_with_rename(self):
+        # Plain zip/cbz entries aren't referenced by any manifest, so they can
+        # be converted to WebP outright (renamed to match) -- the comic-archive
+        # optimizer trick, far bigger wins than JPEG-to-JPEG re-encode.
+        # DOCX/EPUB/Office keep original format+name (XML manifests).
+        core = self.read("optimize-core.js")
+        self.assertIn('const RENAMEABLE_ARCHIVE_EXTS = new Set(["zip", "cbz"])', core)
+        self.assertIn('cleanName.replace(/\.[^.]+$/, ".webp")', core)
+        self.assertIn("output.file(entryResult.name, entryResult.blob", core)
+
+    def test_pdf_rasterizes_automatically_at_default_level(self):
+        # Users shouldn't need the advanced panel to shrink a scan PDF: the
+        # default (medium) level also tries rasterization, adopting only a
+        # dramatic (>=60%) win since it costs text selection.
+        core = self.read("optimize-core.js")
+        self.assertIn('opts.lossBudget === "medium" ? "medium" : null', core)
+        self.assertIn("blob.size * 0.4", core)
+
+    def test_help_section_explains_per_type_tradeoffs(self):
+        html = self.read("index.html")
+        self.assertIn("어떤 파일이 얼마나 줄어드나요?", html)
+        self.assertIn("JPEG보다 25~35% 작고", html)
+        self.assertIn("텍스트 선택/검색이 안 됩니다", html)
+        self.assertIn("HandBrake", html)
+
     def test_folder_input_and_type_grouping(self):
         # Dropping a folder (or a mixed pile of files) groups the queue by
         # type and the results ZIP mirrors those groups as folders.
@@ -197,7 +222,7 @@ class WebAssetTests(unittest.TestCase):
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v24', worker)
+        self.assertIn('optimizerzero-web-lite-v25', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")
@@ -354,7 +379,7 @@ class WebAssetTests(unittest.TestCase):
         core = self.read("optimize-core.js")
 
         self.assertIn("const result = await recompressImageWithLadder(data, opts, mimeType)", core)
-        self.assertIn("if (!result || !result.blob) return { blob: data, changed: false, skipped: true }", core)
+        self.assertIn("if (!result || !result.blob) return { blob: data, name: cleanName, changed: false, skipped: true }", core)
         self.assertIn("imageEntriesSkipped", core)
         self.assertIn("이미지 ${imageEntriesSkipped}개는 원본 유지", core)
 

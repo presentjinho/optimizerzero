@@ -112,6 +112,17 @@
           </div>
         </details>
 
+        <details class="advanced-settings help-section">
+          <summary>어떤 파일이 얼마나 줄어드나요? (장단점)</summary>
+          <div class="help-body">
+            <p><b>이미지 (jpg/png/webp/bmp/gif)</b> — 가장 잘 줄어듭니다. 기본적으로 WebP로 변환하는데, WebP는 같은 화질에서 JPEG보다 25~35% 작고 PNG보다 훨씬 작습니다. 요즘 브라우저/카톡/디스코드 전부 지원합니다. 단점: 아주 오래된 프로그램은 못 열 수 있습니다. 고급 설정에서 AVIF(더 작지만 느림)나 JPEG XL도 선택 가능합니다.</p>
+            <p><b>PDF</b> — 기본 레벨: 구조를 보존하면서 내부 이미지만 재압축합니다. 스캔한 PDF처럼 극적으로 줄어드는 경우(60% 이상)에는 페이지를 이미지로 재구성해 자동 적용합니다. 강력/최대 레벨: 조금이라도 작아지면 재구성을 채택해 최대로 줄입니다. 단점: 재구성된 PDF는 텍스트 선택/검색이 안 됩니다 (결과 메시지에 항상 표시).</p>
+            <p><b>ZIP/CBZ</b> — 안의 이미지를 WebP로 변환해 다시 담습니다(만화/사진 아카이브에 효과 큼). 단, 안에 든 게 영상·이미 압축된 파일이면 더 줄일 방법이 없습니다 — 이건 도구의 한계가 아니라 압축의 원리입니다. DOCX/EPUB 등 문서는 내부 규격 때문에 이미지 형식을 바꾸지 않고 재압축만 합니다.</p>
+            <p><b>영상/오디오 (mp4/mkv/mp3 등)</b> — 자체 코덱으로 이미 압축되어 있어 여기서는 줄지 않습니다. HandBrake 같은 전용 인코더를 쓰세요.</p>
+            <p><b>왜 어떤 파일은 0%인가요?</b> — 이미 최적화된 파일은 더 줄일 수 없습니다. 결과 줄의 메시지가 파일별 이유와 다음 시도를 알려줍니다.</p>
+          </div>
+        </details>
+
         <div class="action-row">
           <button id="runButton" class="primary" type="button">시작</button>
           <button id="clearButton" type="button">비우기</button>
