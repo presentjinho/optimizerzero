@@ -106,7 +106,9 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("ALREADY_COMPRESSED_EXTS", core)
         self.assertIn("전용 인코더", core)
         self.assertIn("강력/최대 레벨은 페이지를 이미지로 재구성", core)
-        self.assertIn("데스크탑 앱이 더 강력합니다", core)
+        self.assertIn("오히려 커집니다(텍스트 위주 PDF)", core)
+        self.assertIn("데스크탑 앱이 더 안정적입니다", core)
+        self.assertIn("내용: ${topEntries}", core)
 
     def test_worker_script_urls_are_version_busted_in_sync(self):
         # Worker importScripts and Worker() spawn URLs carry a ?vNN buster:
@@ -125,6 +127,7 @@ class WebAssetTests(unittest.TestCase):
             stray = set(re.findall(r"\?v\d+", text)) - {f"?{version}"}
             self.assertFalse(stray, f"{name} has mismatched versions: {stray}")
         self.assertIn("ignoreSearch: true", sw)
+        self.assertIn(f'const APP_VERSION = "{version}";', app)
 
     def test_strength_curve_is_wide_and_monotonic(self):
         # The slider promises a spectrum: 나노 ~ visually original, 최대 ~
@@ -175,7 +178,7 @@ class WebAssetTests(unittest.TestCase):
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v22', worker)
+        self.assertIn('optimizerzero-web-lite-v23', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")
