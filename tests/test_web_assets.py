@@ -209,6 +209,17 @@ class WebAssetTests(unittest.TestCase):
         set_dims = [d for d in dims if d]
         self.assertEqual(set_dims, sorted(set_dims, reverse=True))
 
+    def test_presets_never_set_an_absolute_target_size(self):
+        # 강력/최대 used to bake in targetSize 10/5MB -- a 72MB PDF shrunk by
+        # 83% still missed the absolute target and got REJECTED, so big files
+        # "didn't work" until the user manually raised the target. Strength
+        # must come from quality/dimension knobs; absolute size is opt-in.
+        app = self.read("app.js")
+        levels_block = app.split("const STRENGTH_LEVELS = [", 1)[1].split("];", 1)[0]
+        targets = [int(m) for m in re.findall(r"targetSize: (\d+)", levels_block)]
+        self.assertEqual(len(targets), 7)
+        self.assertEqual(set(targets), {0})
+
     def test_nano_level_actually_recompresses_instead_of_a_no_op(self):
         # Level 1 (나노 압축) used to set lossBudget "none", which makes
         # optimizeImageFile() skip recompression outright -- a loose image file at
@@ -242,7 +253,7 @@ class WebAssetTests(unittest.TestCase):
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v26', worker)
+        self.assertIn('optimizerzero-web-lite-v27', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")
