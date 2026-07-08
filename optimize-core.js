@@ -298,7 +298,10 @@ async function optimizeArchive(file, opts) {
     const entryResult = await maybeOptimizeArchiveEntry(fileExt, cleanName, data, opts);
     imageEntriesOptimized += entryResult.changed ? 1 : 0;
     imageEntriesSkipped += entryResult.skipped ? 1 : 0;
-    const compression = fileExt === "epub" && cleanName === "mimetype" ? "STORE" : "DEFLATE";
+    // Image entries are already compressed (webp/jpg/png) -- deflating them
+    // again wastes CPU on every entry and usually ADDS bytes. STORE them.
+    const entryIsImage = archiveImageExts.has(extOfName(entryResult.name));
+    const compression = (fileExt === "epub" && cleanName === "mimetype") || entryIsImage ? "STORE" : "DEFLATE";
     output.file(entryResult.name, entryResult.blob, { compression });
   }
   const blob = await output.generateAsync({
@@ -481,13 +484,14 @@ class OffscreenCanvasFactory {
 // stream-replacement pass above can't touch. The trade is real: text stops
 // being selectable, so callers gate this on the "high" loss budget and only
 // keep the result when it's actually smaller.
+const MAX_RASTERIZE_PAGES = 400;
+
 async function rasterizePdfDocument(sourceBytes, opts) {
   if (!pdfjsReady()) return null;
   const chasing = opts.targetSizeBytes && opts.targetSizeBytes > 0;
   // 최대 압축 (quality <= 0.5) starts at a lower page DPI -- the whole point
   // of that level is trading visible quality for size.
   const baseDpi = (opts.quality || 0.7) <= 0.5 ? 110 : 150;
-  const dpis = chasing ? [baseDpi, ...[120, 96, 72].filter((dpi) => dpi < baseDpi)] : [baseDpi];
   const jpegQuality = Math.min(0.9, Math.max(0.35, opts.quality || 0.7));
   const inWorker = typeof document === "undefined";
   const canvasFactory = inWorker ? new OffscreenCanvasFactory() : undefined;
@@ -496,8 +500,19 @@ async function rasterizePdfDocument(sourceBytes, opts) {
   // API location) and to page.render (v3 location) so either build works.
   const doc = await pdfjsLib.getDocument({ data: sourceBytes.slice(0), isEvalSupported: false, canvasFactory }).promise;
   try {
+    // Rendering every page of a huge PDF can exhaust tab memory -- refuse
+    // rather than crash. The structure-preserving pass still applies.
+    if (doc.numPages > MAX_RASTERIZE_PAGES) {
+      console.warn(`PDF 페이지 ${doc.numPages}개 > ${MAX_RASTERIZE_PAGES} -- 재구성 생략 (메모리 보호)`);
+      return null;
+    }
+    // JPEG size scales roughly with pixel count (dpi²): after the first
+    // render, jump straight to the DPI predicted to hit the target instead
+    // of walking every rung -- 2 full-document renders instead of up to 4.
+    let dpis = [baseDpi];
     let best = null;
-    for (const dpi of dpis) {
+    for (let attempt = 0; attempt < dpis.length; attempt++) {
+      const dpi = dpis[attempt];
       const out = await PDFLib.PDFDocument.create();
       for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
         const page = await doc.getPage(pageNumber);
@@ -525,6 +540,11 @@ async function rasterizePdfDocument(sourceBytes, opts) {
       const bytes = await out.save({ useObjectStreams: true, addDefaultPage: false });
       if (!best || bytes.length < best.bytes.length) best = { bytes, dpi, pageCount: doc.numPages };
       if (!chasing || bytes.length <= opts.targetSizeBytes) break;
+      if (attempt === 0) {
+        const predicted = Math.round(dpi * Math.sqrt((opts.targetSizeBytes / bytes.length) * 0.85));
+        const nextDpi = Math.max(60, Math.min(predicted, dpi - 10));
+        if (nextDpi < dpi) dpis = [dpi, nextDpi];
+      }
     }
     return best;
   } finally {
