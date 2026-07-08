@@ -298,7 +298,28 @@ async function optimizeArchive(file, opts) {
     mimeType: file.type || "application/octet-stream",
   });
   const accepted = outputAccepted(file.size, blob.size, opts);
-  if (!accepted.ok) return { status: "skipped", message: accepted.message };
+  if (!accepted.ok) {
+    // Say what's inside so a 0% result diagnoses itself: a ZIP of mp4s
+    // can't shrink, a ZIP of JPEGs that didn't shrink means they're
+    // already heavily compressed.
+    const counts = {};
+    for (const [name, entry] of Object.entries(source.files)) {
+      if (entry.dir) continue;
+      const ext = extOfName(name) || "기타";
+      counts[ext] = (counts[ext] || 0) + 1;
+    }
+    const topEntries = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3)
+      .map(([ext, n]) => `${ext} ${n}개`).join(", ");
+    const mostlyPrecompressed = Object.entries(counts)
+      .filter(([ext]) => ALREADY_COMPRESSED_EXTS.has(ext))
+      .reduce((sum, [, n]) => sum + n, 0) > Object.values(counts).reduce((a, b) => a + b, 0) / 2;
+    const hint = mostlyPrecompressed
+      ? " · 안의 파일들이 이미 압축된 형식(영상 등)이라 재압축으로는 줄지 않습니다."
+      : opts.lossBudget === "high"
+        ? " · 내용물이 이미 강하게 압축된 상태입니다."
+        : " · 강력/최대 레벨이면 안의 이미지를 더 줄일 수 있습니다.";
+    return { status: "skipped", message: `${accepted.message} (내용: ${topEntries})${hint}` };
+  }
   const outName = fileExt === "zip" && isImageOnlyZipEntries(source.files)
     ? file.name.replace(/\.[^.]+$/, ".ozero.cbz")
     : file.name.replace(/(\.[^.]+)$/, ".ozero$1");
@@ -524,27 +545,36 @@ async function optimizePdfFile(file, opts) {
   });
   let blob = new Blob([outputBytes], { type: "application/pdf" });
   let detail = recompressedImages ? `${pageCount}페이지 / 이미지 ${recompressedImages}개 재압축` : `${pageCount}페이지`;
+  let rasterState = "below-level";
   if (opts.lossBudget === "high") {
     try {
       const raster = await rasterizePdfDocument(sourceBytes, opts);
       if (raster && raster.pageCount === pageCount && raster.bytes.length < blob.size) {
         blob = new Blob([raster.bytes], { type: "application/pdf" });
         detail = `${pageCount}페이지 / 스캔형 재구성 ${raster.dpi}DPI (텍스트 선택 불가)`;
+        rasterState = "used";
+      } else {
+        rasterState = raster ? "larger" : "unavailable";
       }
     } catch (error) {
       // rasterization is opportunistic -- any failure falls back to the
       // structure-preserving result computed above. Logged because a silent
       // fallback here once hid a worker-only pdf.js loading failure.
       console.warn("PDF 스캔형 재구성 실패, 구조 보존 결과 사용:", error);
+      rasterState = `실패: ${String(error && error.message || error).slice(0, 120)}`;
     }
   }
   const accepted = outputAccepted(file.size, blob.size, opts);
   if (!accepted.ok) {
     // Say WHY and what to try next -- "기준 미달" alone sends users off to
     // ask a human what it means.
-    const hint = opts.lossBudget === "high"
-      ? " · 이 PDF는 브라우저에서 더 줄이기 어렵습니다(텍스트 위주이거나 이미 최적화됨). 데스크탑 앱이 더 강력합니다."
-      : " · 강력/최대 레벨은 페이지를 이미지로 재구성해 스캔 PDF를 크게 줄일 수 있습니다.";
+    const hint = rasterState === "below-level"
+      ? " · 강력/최대 레벨은 페이지를 이미지로 재구성해 스캔 PDF를 크게 줄일 수 있습니다."
+      : rasterState === "larger"
+        ? " · 페이지를 이미지로 재구성해봤지만 오히려 커집니다(텍스트 위주 PDF). 이 파일은 이미 작게 저장되어 있습니다."
+        : rasterState === "unavailable"
+          ? " · 페이지 재구성 엔진을 사용할 수 없었습니다. 새로고침 후 다시 시도해보세요."
+          : ` · 페이지 재구성 중 오류가 났습니다 (${rasterState}). 데스크탑 앱이 더 안정적입니다.`;
     return { status: "skipped", message: `${accepted.message} (${detail})${hint}` };
   }
   const outName = file.name.replace(/(\.[^.]+)?$/, ".ozero.pdf");
