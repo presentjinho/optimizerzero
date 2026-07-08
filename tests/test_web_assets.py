@@ -99,6 +99,26 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("\ucd5c\ub300 \uc555\ucd95", app)
         self.assertIn('el.strength.addEventListener("input", applyStrength)', app)
 
+    def test_security_and_stability_hardening(self):
+        html = self.read("index.html")
+        headers = self.read("_headers")
+        core = self.read("optimize-core.js")
+
+        # GitHub Pages can't send headers -- CSP must ship as a meta tag
+        self.assertIn('http-equiv="Content-Security-Policy"', html)
+        self.assertIn("object-src 'none'", html)
+        self.assertIn("wasm-unsafe-eval", html)
+        self.assertIn('<meta name="referrer" content="no-referrer" />', html)
+        # header-capable hosts (Cloudflare/Netlify) get the full set
+        self.assertIn("Content-Security-Policy:", headers)
+        self.assertIn("X-Content-Type-Options: nosniff", headers)
+        # a huge PDF must refuse rasterization instead of OOMing the tab
+        self.assertIn("MAX_RASTERIZE_PAGES", core)
+        # DPI targeting: predict the hit instead of walking every rung
+        self.assertIn("Math.sqrt((opts.targetSizeBytes / bytes.length)", core)
+        # image entries are STOREd, not double-deflated
+        self.assertIn('entryIsImage ? "STORE" : "DEFLATE"', core)
+
     def test_zip_cbz_entries_convert_to_webp_with_rename(self):
         # Plain zip/cbz entries aren't referenced by any manifest, so they can
         # be converted to WebP outright (renamed to match) -- the comic-archive
@@ -222,7 +242,7 @@ class WebAssetTests(unittest.TestCase):
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v25', worker)
+        self.assertIn('optimizerzero-web-lite-v26', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")

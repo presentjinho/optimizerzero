@@ -6,6 +6,11 @@
     <title>OptimizerZero Web Lite</title>
     <meta name="description" content="파일을 서버에 올리지 않고 브라우저 안에서 안전하게 압축합니다." />
     <meta name="robots" content="noindex,nofollow,noarchive" />
+    <!-- GitHub Pages can't send response headers, so the security policy
+         ships as meta tags. blob: covers preview/download object URLs,
+         wasm-unsafe-eval covers the AVIF/JXL WebAssembly encoders. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'" />
+    <meta name="referrer" content="no-referrer" />
     <meta name="theme-color" content="#111312" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
