@@ -99,6 +99,25 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("\ucd5c\ub300 \uc555\ucd95", app)
         self.assertIn('el.strength.addEventListener("input", applyStrength)', app)
 
+    def test_folder_input_and_type_grouping(self):
+        # Dropping a folder (or a mixed pile of files) groups the queue by
+        # type and the results ZIP mirrors those groups as folders.
+        html = self.read("index.html")
+        app = self.read("app.js")
+        css = self.read("styles.css")
+
+        self.assertIn('id="folderInput" class="visually-hidden" type="file" webkitdirectory multiple', html)
+        self.assertIn('id="folderButton"', html)
+        self.assertIn("function fileCategory(file)", app)
+        self.assertIn("async function filesFromDataTransfer(dataTransfer)", app)
+        # entries must be captured before the first await or the
+        # DataTransferItemList is already gone
+        self.assertIn("webkitGetAsEntry", app)
+        self.assertIn("file-group-header", app)
+        self.assertIn(".file-group-header", css)
+        # results ZIP: folder per category only when the batch mixes types
+        self.assertIn("categories.size > 1 ? `${result.category ||", app)
+
     def test_skip_messages_explain_why_and_what_to_try(self):
         # A bare "기준 미달" skip sends users off to ask a human what it
         # means. Skips must carry the reason and the next thing to try.
@@ -178,7 +197,7 @@ class WebAssetTests(unittest.TestCase):
         ):
             self.assertIn(asset, worker)
         self.assertIn('caches.match("./index.html")', worker)
-        self.assertIn('optimizerzero-web-lite-v23', worker)
+        self.assertIn('optimizerzero-web-lite-v24', worker)
 
     def test_static_headers_force_utf8_for_korean_text(self):
         headers = self.read("_headers")

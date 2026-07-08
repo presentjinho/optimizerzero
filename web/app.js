@@ -4,11 +4,13 @@
 // Kept in lockstep with service-worker.js CACHE_NAME and the ?vNN worker
 // URL busters by a regression test. Shown in the status pill so "which
 // version are you actually running" stops being a support question.
-const APP_VERSION = "v23";
+const APP_VERSION = "v24";
 const state = { files: [], rejected: [], results: [], running: false };
 const el = {
   dropZone: document.querySelector("#dropZone"),
   fileInput: document.querySelector("#fileInput"),
+  folderInput: document.querySelector("#folderInput"),
+  folderButton: document.querySelector("#folderButton"),
   fileList: document.querySelector("#fileList"),
   emptyState: document.querySelector("#emptyState"),
   totals: document.querySelector("#totals"),
@@ -61,6 +63,16 @@ function currentLevel() {
 
 function fileKey(file) {
   return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+// Queue grouping + result-ZIP folder names. Fixed display order.
+const FILE_CATEGORIES = ["이미지", "PDF", "압축·문서", "기타"];
+function fileCategory(file) {
+  const ext = extOf(file);
+  if (imageExts.has(ext)) return "이미지";
+  if (pdfExts.has(ext)) return "PDF";
+  if (archiveExts.has(ext)) return "압축·문서";
+  return "기타";
 }
 
 function supported(file) {
@@ -166,7 +178,23 @@ function render() {
   const totalSize = state.files.reduce((sum, file) => sum + file.size, 0);
   const rejected = state.rejected.length ? ` / 제외 ${state.rejected.length}` : "";
   el.totals.textContent = `${state.files.length}개 파일 / ${formatBytes(totalSize)}${rejected}`;
-  for (const file of state.files) {
+  const groups = new Map(FILE_CATEGORIES.map((c) => [c, []]));
+  for (const file of state.files) groups.get(fileCategory(file)).push(file);
+  const usedCategories = FILE_CATEGORIES.filter((c) => groups.get(c).length);
+  const orderedFiles = usedCategories.flatMap((c) => groups.get(c));
+  let lastCategory = null;
+  for (const file of orderedFiles) {
+    // group headers only earn their space when there's actual variety
+    const category = fileCategory(file);
+    if (usedCategories.length > 1 && category !== lastCategory) {
+      lastCategory = category;
+      const groupFiles = groups.get(category);
+      const groupSize = groupFiles.reduce((sum, f) => sum + f.size, 0);
+      const header = document.createElement("div");
+      header.className = "file-group-header";
+      header.textContent = `${category} · ${groupFiles.length}개 · ${formatBytes(groupSize)}`;
+      el.fileList.appendChild(header);
+    }
     const row = el.rowTemplate.content.firstElementChild.cloneNode(true);
     const key = fileKey(file);
     row.dataset.key = key;
@@ -285,6 +313,7 @@ function recordResult(file, result) {
   const record = {
     key: fileKey(file),
     name: file.name,
+    category: fileCategory(file),
     status: result.status,
     originalSize: file.size,
     outputSize: result.blob?.size || file.size,
@@ -422,7 +451,7 @@ function applyConcurrencyHint() {
 // instead of recording it as an error. It must NOT fire for legitimate
 // skip outcomes (animated image, savings threshold not met) -- those come
 // back as `ok: true` with a "skipped" status and are recorded as-is.
-function runWithWorkerPool(files, opts, onDone, workerScript = "./worker.js?v23", workerOptions, onFailure) {
+function runWithWorkerPool(files, opts, onDone, workerScript = "./worker.js?v24", workerOptions, onFailure) {
   if (!files.length) return Promise.resolve();
   return new Promise((resolve) => {
     const queue = files.slice();
@@ -496,7 +525,7 @@ const SUPPORTS_AVIF_JXL_WORKER = typeof OffscreenCanvas !== "undefined" && typeo
 // wasm encoder can't load on this browser/device.
 function runWithCodecRouting(files, opts, onDone) {
   if (opts.codec === "webp" || !SUPPORTS_AVIF_JXL_WORKER) {
-    return runWithWorkerPool(files, opts, onDone, "./worker.js?v23");
+    return runWithWorkerPool(files, opts, onDone, "./worker.js?v24");
   }
   const imageFiles = files.filter((f) => imageExts.has(extOf(f)));
   const otherFiles = files.filter((f) => !imageExts.has(extOf(f)));
@@ -504,8 +533,8 @@ function runWithCodecRouting(files, opts, onDone) {
   const engineOpts = isAuto ? { ...opts, codec: "avif" } : opts;
   const fallbackToWebp = isAuto ? (file) => optimizeFile(file, { ...opts, codec: "webp" }) : null;
   return Promise.all([
-    runWithWorkerPool(imageFiles, engineOpts, onDone, "./avif-jxl-worker.js?v23", { type: "module" }, fallbackToWebp),
-    runWithWorkerPool(otherFiles, { ...opts, codec: "webp" }, onDone, "./worker.js?v23"),
+    runWithWorkerPool(imageFiles, engineOpts, onDone, "./avif-jxl-worker.js?v24", { type: "module" }, fallbackToWebp),
+    runWithWorkerPool(otherFiles, { ...opts, codec: "webp" }, onDone, "./worker.js?v24"),
   ]);
 }
 
@@ -632,8 +661,12 @@ async function saveBundle() {
     return;
   }
   const zip = new JSZip();
-  for (const result of optimizedResults()) {
-    zip.file(result.outName || result.name, result.blob);
+  const results = optimizedResults();
+  const categories = new Set(results.map((r) => r.category || "기타"));
+  for (const result of results) {
+    const name = result.outName || result.name;
+    // folder-per-type only when the batch actually mixes types
+    zip.file(categories.size > 1 ? `${result.category || "기타"}/${name}` : name, result.blob);
   }
   const blob = await zip.generateAsync({
     type: "blob",
@@ -655,6 +688,33 @@ el.dropZone.addEventListener("keydown", (event) => {
   }
 });
 el.fileInput.addEventListener("change", (event) => setFiles(event.target.files));
+if (el.folderInput) el.folderInput.addEventListener("change", (event) => setFiles(event.target.files));
+
+// Dropped directories arrive as FileSystemEntry trees, not File objects --
+// walk them. Entries MUST be captured synchronously during the drop event;
+// after the first await the DataTransferItemList is gone.
+async function filesFromDataTransfer(dataTransfer) {
+  const flatFiles = dataTransfer.files;
+  const entries = dataTransfer.items
+    ? [...dataTransfer.items].map((item) => item.webkitGetAsEntry && item.webkitGetAsEntry()).filter(Boolean)
+    : [];
+  if (!entries.some((entry) => entry.isDirectory)) return flatFiles;
+  const collected = [];
+  const walk = async (entry) => {
+    if (entry.isFile) {
+      collected.push(await new Promise((resolve, reject) => entry.file(resolve, reject)));
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      let batch;
+      do {
+        batch = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+        for (const child of batch) await walk(child);
+      } while (batch.length);
+    }
+  };
+  for (const entry of entries) await walk(entry);
+  return collected;
+}
 el.strength.addEventListener("input", applyStrength);
 if (el.codec) el.codec.addEventListener("change", applyCodecHint);
 if (el.concurrency) el.concurrency.addEventListener("change", applyConcurrencyHint);
@@ -663,11 +723,16 @@ el.dropZone.addEventListener("dragover", (event) => {
   el.dropZone.classList.add("dragging");
 });
 el.dropZone.addEventListener("dragleave", () => el.dropZone.classList.remove("dragging"));
-el.dropZone.addEventListener("drop", (event) => {
+el.dropZone.addEventListener("drop", async (event) => {
   event.preventDefault();
   el.dropZone.classList.remove("dragging");
   if (state.running) return;
-  setFiles(event.dataTransfer.files);
+  setFiles(await filesFromDataTransfer(event.dataTransfer));
+});
+if (el.folderButton) el.folderButton.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!state.running) el.folderInput.click();
 });
 el.runButton.addEventListener("click", run);
 el.clearButton.addEventListener("click", () => {
