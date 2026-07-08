@@ -4,7 +4,7 @@
 // Kept in lockstep with service-worker.js CACHE_NAME and the ?vNN worker
 // URL busters by a regression test. Shown in the status pill so "which
 // version are you actually running" stops being a support question.
-const APP_VERSION = "v26";
+const APP_VERSION = "v27";
 const state = { files: [], rejected: [], results: [], running: false };
 const el = {
   dropZone: document.querySelector("#dropZone"),
@@ -51,9 +51,9 @@ const STRENGTH_LEVELS = [
   { label: "살짝 압축", profile: "safe", lossBudget: "low", quality: 94, targetSize: 0, minSavings: 0, limit: 150, maxDimension: 0, message: "살짝 압축: 화질 손실 거의 없이 아주 조금만 줄임." },
   { label: "가벼운 압축", profile: "balanced", lossBudget: "low", quality: 90, targetSize: 0, minSavings: 1, limit: 100, maxDimension: 0, message: "가벼운 압축: 화질 우선, 절감은 보너스." },
   { label: "기본 압축", profile: "balanced", lossBudget: "medium", quality: 85, targetSize: 0, minSavings: 1, limit: 150, maxDimension: 0, message: "기본 압축: 화질과 용량의 균형 (추천)." },
-  { label: "강한 압축", profile: "balanced", lossBudget: "medium", quality: 75, targetSize: 25, minSavings: 1, limit: 150, maxDimension: 2800, message: "강한 압축: 용량을 더 줄이고 화질은 약간 양보. 과도하게 큰 이미지는 2800px로 축소." },
-  { label: "강력 압축", profile: "strong", lossBudget: "high", quality: 62, targetSize: 10, minSavings: 3, limit: 150, maxDimension: 2000, message: "강력 압축: 용량 우선, 결과 확인 후 사용. 큰 이미지는 2000px로 축소." },
-  { label: "최대 압축", profile: "strong", lossBudget: "high", quality: 45, targetSize: 5, minSavings: 3, limit: 150, maxDimension: 1280, message: "최대 압축: 용량 최우선. 화질을 크게 양보하고 큰 이미지는 1280px로 축소. 결과 꼭 확인." },
+  { label: "강한 압축", profile: "balanced", lossBudget: "medium", quality: 75, targetSize: 0, minSavings: 1, limit: 150, maxDimension: 2800, message: "강한 압축: 용량을 더 줄이고 화질은 약간 양보. 과도하게 큰 이미지는 2800px로 축소." },
+  { label: "강력 압축", profile: "strong", lossBudget: "high", quality: 62, targetSize: 0, minSavings: 3, limit: 150, maxDimension: 2000, message: "강력 압축: 용량 우선, 결과 확인 후 사용. 큰 이미지는 2000px로 축소." },
+  { label: "최대 압축", profile: "strong", lossBudget: "high", quality: 45, targetSize: 0, minSavings: 3, limit: 150, maxDimension: 1280, message: "최대 압축: 용량 최우선. 화질을 크게 양보하고 큰 이미지는 1280px로 축소. 결과 꼭 확인." },
 ];
 
 function currentLevel() {
@@ -451,7 +451,7 @@ function applyConcurrencyHint() {
 // instead of recording it as an error. It must NOT fire for legitimate
 // skip outcomes (animated image, savings threshold not met) -- those come
 // back as `ok: true` with a "skipped" status and are recorded as-is.
-function runWithWorkerPool(files, opts, onDone, workerScript = "./worker.js?v26", workerOptions, onFailure) {
+function runWithWorkerPool(files, opts, onDone, workerScript = "./worker.js?v27", workerOptions, onFailure) {
   if (!files.length) return Promise.resolve();
   return new Promise((resolve) => {
     const queue = files.slice();
@@ -525,7 +525,7 @@ const SUPPORTS_AVIF_JXL_WORKER = typeof OffscreenCanvas !== "undefined" && typeo
 // wasm encoder can't load on this browser/device.
 function runWithCodecRouting(files, opts, onDone) {
   if (opts.codec === "webp" || !SUPPORTS_AVIF_JXL_WORKER) {
-    return runWithWorkerPool(files, opts, onDone, "./worker.js?v26");
+    return runWithWorkerPool(files, opts, onDone, "./worker.js?v27");
   }
   const imageFiles = files.filter((f) => imageExts.has(extOf(f)));
   const otherFiles = files.filter((f) => !imageExts.has(extOf(f)));
@@ -533,8 +533,8 @@ function runWithCodecRouting(files, opts, onDone) {
   const engineOpts = isAuto ? { ...opts, codec: "avif" } : opts;
   const fallbackToWebp = isAuto ? (file) => optimizeFile(file, { ...opts, codec: "webp" }) : null;
   return Promise.all([
-    runWithWorkerPool(imageFiles, engineOpts, onDone, "./avif-jxl-worker.js?v26", { type: "module" }, fallbackToWebp),
-    runWithWorkerPool(otherFiles, { ...opts, codec: "webp" }, onDone, "./worker.js?v26"),
+    runWithWorkerPool(imageFiles, engineOpts, onDone, "./avif-jxl-worker.js?v27", { type: "module" }, fallbackToWebp),
+    runWithWorkerPool(otherFiles, { ...opts, codec: "webp" }, onDone, "./worker.js?v27"),
   ]);
 }
 
