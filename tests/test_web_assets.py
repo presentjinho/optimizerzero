@@ -361,12 +361,13 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn("cloudflare/wrangler-action@v3", workflow)
         self.assertIn("pages deploy web --project-name optimizerzero", workflow)
 
-    def test_ci_workflow_is_manual_to_avoid_failure_mail_noise(self):
+    def test_ci_workflow_checks_main_and_pull_requests(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
         self.assertIn("workflow_dispatch:", workflow)
-        self.assertNotIn("push:", workflow)
-        self.assertNotIn("pull_request:", workflow)
+        self.assertIn("push:", workflow)
+        self.assertIn("pull_request:", workflow)
+        self.assertIn("cancel-in-progress: true", workflow)
         self.assertIn("python -m unittest discover -s tests -v", workflow)
         self.assertIn(".\\verify-web.ps1", workflow)
 
