@@ -358,7 +358,7 @@ class WebAssetTests(unittest.TestCase):
         self.assertNotIn("push:", workflow)
         self.assertIn("CLOUDFLARE_API_TOKEN", workflow)
         self.assertIn("CLOUDFLARE_ACCOUNT_ID", workflow)
-        self.assertIn("cloudflare/wrangler-action@v3", workflow)
+        self.assertIn("cloudflare/wrangler-action@v4", workflow)
         self.assertIn("pages deploy web --project-name optimizerzero", workflow)
 
     def test_ci_workflow_checks_main_and_pull_requests(self):
