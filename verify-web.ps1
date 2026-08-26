@@ -41,8 +41,8 @@ node --check (Join-Path "web" "worker.js")
 node --check (Join-Path "web" "service-worker.js")
 node --check (Join-Path "functions" "_middleware.js")
 Get-Content -Raw -LiteralPath (Join-Path "web" "avif-jxl-worker.js") | node --input-type=module --check
-Get-Content -Raw -LiteralPath (Join-Path "web" "vendor" "jsquash-avif" "encode.js") | node --input-type=module --check
-Get-Content -Raw -LiteralPath (Join-Path "web" "vendor" "jsquash-jxl" "encode.js") | node --input-type=module --check
+Get-Content -Raw -LiteralPath (Join-Path (Join-Path (Join-Path "web" "vendor") "jsquash-avif") "encode.js") | node --input-type=module --check
+Get-Content -Raw -LiteralPath (Join-Path (Join-Path (Join-Path "web" "vendor") "jsquash-jxl") "encode.js") | node --input-type=module --check
 & $PythonExe -m unittest tests.test_web_assets -v
 
 function Assert-TextContains {
