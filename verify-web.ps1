@@ -35,14 +35,14 @@ function Get-PythonExe {
 $PythonExe = Get-PythonExe
 $env:PYTHONPATH = Join-Path $PSScriptRoot "src"
 
-node --check web\app.js
-node --check web\optimize-core.js
-node --check web\worker.js
-node --check web\service-worker.js
-node --check functions\_middleware.js
-Get-Content -Raw -LiteralPath web\avif-jxl-worker.js | node --input-type=module --check
-Get-Content -Raw -LiteralPath web\vendor\jsquash-avif\encode.js | node --input-type=module --check
-Get-Content -Raw -LiteralPath web\vendor\jsquash-jxl\encode.js | node --input-type=module --check
+node --check (Join-Path "web" "app.js")
+node --check (Join-Path "web" "optimize-core.js")
+node --check (Join-Path "web" "worker.js")
+node --check (Join-Path "web" "service-worker.js")
+node --check (Join-Path "functions" "_middleware.js")
+Get-Content -Raw -LiteralPath (Join-Path "web" "avif-jxl-worker.js") | node --input-type=module --check
+Get-Content -Raw -LiteralPath (Join-Path "web" "vendor" "jsquash-avif" "encode.js") | node --input-type=module --check
+Get-Content -Raw -LiteralPath (Join-Path "web" "vendor" "jsquash-jxl" "encode.js") | node --input-type=module --check
 & $PythonExe -m unittest tests.test_web_assets -v
 
 function Assert-TextContains {
@@ -72,7 +72,7 @@ Assert-TextContains -Path "wrangler.toml" -Needle 'name = "optimizerzero"'
 Assert-TextContains -Path "deploy-cloudflare.ps1" -Needle "Dry run only"
 Assert-TextContains -Path "deploy-cloudflare.ps1" -Needle "wrangler@latest"
 Assert-TextContains -Path ".github\workflows\deploy-cloudflare.yml" -Needle "workflow_dispatch:"
-Assert-TextContains -Path ".github\workflows\deploy-cloudflare.yml" -Needle "cloudflare/wrangler-action@v4"
+Assert-TextContains -Path ".github\workflows\deploy-cloudflare.yml" -Needle "cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0"
 Assert-TextContains -Path ".github\workflows\deploy-cloudflare.yml" -Needle "pages deploy web --project-name optimizerzero"
 Assert-TextContains -Path "docs\GITHUB_SECRETS_CLOUDFLARE_KO.md" -Needle "CLOUDFLARE_API_TOKEN"
 Assert-TextContains -Path "docs\GITHUB_SECRETS_CLOUDFLARE_KO.md" -Needle "CLOUDFLARE_ACCOUNT_ID"

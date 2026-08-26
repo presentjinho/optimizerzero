@@ -126,7 +126,7 @@ class WebAssetTests(unittest.TestCase):
         # DOCX/EPUB/Office keep original format+name (XML manifests).
         core = self.read("optimize-core.js")
         self.assertIn('const RENAMEABLE_ARCHIVE_EXTS = new Set(["zip", "cbz"])', core)
-        self.assertIn('cleanName.replace(/\.[^.]+$/, ".webp")', core)
+        self.assertIn(r'cleanName.replace(/\.[^.]+$/, ".webp")', core)
         self.assertIn("output.file(entryResult.name, entryResult.blob", core)
 
     def test_pdf_rasterizes_automatically_at_default_level(self):
