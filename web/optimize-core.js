@@ -8,6 +8,13 @@ const archiveImageExts = new Set(["jpg", "jpeg", "webp", "bmp", "gif", "png"]);
 const imageOptimizableArchiveExts = new Set(["zip", "cbz", "epub", "docx", "pptx", "xlsx", "odt", "ods", "odp", "jar"]);
 const RECOMPRESSABLE_PDF_COLORSPACES = new Set(["DeviceRGB", "DeviceGray"]);
 const IGNORABLE_ZIP_ENTRY_NAMES = new Set([".ds_store", "thumbs.db", "desktop.ini"]);
+const ARCHIVE_MAX_ENTRIES = 5000;
+const ARCHIVE_MAX_ENTRY_BYTES = 256 * 1024 * 1024;
+const ARCHIVE_MAX_TOTAL_BYTES = 512 * 1024 * 1024;
+const ARCHIVE_MAX_COMPRESSION_RATIO = 500;
+const MAX_DECODED_IMAGE_PIXELS = 40_000_000;
+const MAX_PDF_PAGE_PIXELS = 25_000_000;
+const MAX_PDF_TOTAL_PIXELS = 250_000_000;
 
 function extOfName(name) {
   return (name.split(".").pop() || "").toLowerCase();
@@ -148,23 +155,30 @@ function computeResizedDimensions(width, height, maxDimension) {
 // not just the blob, to keep their dict in sync with what got drawn.
 async function recompressImage(blob, mimeType, quality, maxDimension = 0) {
   const image = await createImageBitmap(blob);
-  const { width, height } = computeResizedDimensions(image.width, image.height, maxDimension);
-  const useOffscreen = typeof document === "undefined" && typeof OffscreenCanvas !== "undefined";
-  let outBlob;
-  if (useOffscreen) {
-    const canvas = new OffscreenCanvas(width, height);
-    const ctx = canvas.getContext("2d", { alpha: mimeType === "image/png" });
-    ctx.drawImage(image, 0, 0, width, height);
-    outBlob = await canvas.convertToBlob({ type: mimeType, quality });
-  } else {
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d", { alpha: mimeType === "image/png" });
-    ctx.drawImage(image, 0, 0, width, height);
-    outBlob = await new Promise((resolve) => canvas.toBlob(resolve, mimeType, quality));
+  try {
+    if (!Number.isSafeInteger(image.width * image.height) || image.width * image.height > MAX_DECODED_IMAGE_PIXELS) {
+      throw new Error("이미지 해상도가 안전 한도를 넘습니다 (최대 4천만 픽셀).");
+    }
+    const { width, height } = computeResizedDimensions(image.width, image.height, maxDimension);
+    const useOffscreen = typeof document === "undefined" && typeof OffscreenCanvas !== "undefined";
+    let outBlob;
+    if (useOffscreen) {
+      const canvas = new OffscreenCanvas(width, height);
+      const ctx = canvas.getContext("2d", { alpha: mimeType === "image/png" });
+      ctx.drawImage(image, 0, 0, width, height);
+      outBlob = await canvas.convertToBlob({ type: mimeType, quality });
+    } else {
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d", { alpha: mimeType === "image/png" });
+      ctx.drawImage(image, 0, 0, width, height);
+      outBlob = await new Promise((resolve) => canvas.toBlob(resolve, mimeType, quality));
+    }
+    return { blob: outBlob, width, height };
+  } finally {
+    image.close();
   }
-  return { blob: outBlob, width, height };
 }
 
 // Mirrors desktop core.py's quality_ladder(): the strength slider's chosen
@@ -284,10 +298,38 @@ function isImageOnlyZipEntries(files) {
   return names.every((name) => archiveImageExts.has(extOfName(name)));
 }
 
+function validateArchiveBudget(files) {
+  const entries = Object.entries(files).filter(([, entry]) => !entry.dir);
+  if (entries.length > ARCHIVE_MAX_ENTRIES) {
+    throw new Error(`압축 항목이 너무 많습니다 (${entries.length}개, 최대 ${ARCHIVE_MAX_ENTRIES}개).`);
+  }
+  let total = 0;
+  for (const [name, entry] of entries) {
+    safeArchiveName(name);
+    const unixMode = Number(entry.unixPermissions || 0);
+    if ((unixMode & 0o170000) === 0o120000) {
+      throw new Error(`링크 항목은 안전을 위해 처리하지 않습니다: ${name}`);
+    }
+    const expanded = Number(entry._data?.uncompressedSize || 0);
+    const compressed = Number(entry._data?.compressedSize || 0);
+    if (!Number.isSafeInteger(expanded) || expanded < 0 || expanded > ARCHIVE_MAX_ENTRY_BYTES) {
+      throw new Error(`압축을 풀었을 때 너무 큰 항목입니다: ${name}`);
+    }
+    total += expanded;
+    if (!Number.isSafeInteger(total) || total > ARCHIVE_MAX_TOTAL_BYTES) {
+      throw new Error("압축을 풀었을 때 전체 크기가 안전 한도를 넘습니다.");
+    }
+    if (expanded > 0 && (compressed <= 0 || expanded / compressed > ARCHIVE_MAX_COMPRESSION_RATIO)) {
+      throw new Error(`비정상적으로 높은 압축률의 항목입니다: ${name}`);
+    }
+  }
+}
+
 async function optimizeArchive(file, opts) {
   if (typeof JSZip === "undefined") throw new Error("압축 엔진을 불러오지 못했습니다.");
   const fileExt = extOf(file);
   const source = await JSZip.loadAsync(file);
+  validateArchiveBudget(source.files);
   const output = new JSZip();
   let imageEntriesOptimized = 0;
   let imageEntriesSkipped = 0;
@@ -514,12 +556,18 @@ async function rasterizePdfDocument(sourceBytes, opts) {
     for (let attempt = 0; attempt < dpis.length; attempt++) {
       const dpi = dpis[attempt];
       const out = await PDFLib.PDFDocument.create();
+      let renderedPixels = 0;
       for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
         const page = await doc.getPage(pageNumber);
         const baseViewport = page.getViewport({ scale: 1 });
         const viewport = page.getViewport({ scale: dpi / 72 });
         const width = Math.max(1, Math.floor(viewport.width));
         const height = Math.max(1, Math.floor(viewport.height));
+        const pagePixels = width * height;
+        renderedPixels += pagePixels;
+        if (!Number.isSafeInteger(pagePixels) || pagePixels > MAX_PDF_PAGE_PIXELS || renderedPixels > MAX_PDF_TOTAL_PIXELS) {
+          throw new Error("PDF 페이지 해상도 또는 전체 렌더링 크기가 안전 한도를 넘습니다.");
+        }
         const useOffscreen = typeof document === "undefined" && typeof OffscreenCanvas !== "undefined";
         const canvas = useOffscreen ? new OffscreenCanvas(width, height) : document.createElement("canvas");
         if (!useOffscreen) {

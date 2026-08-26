@@ -11,6 +11,24 @@
   --danger: #ff8b6f;
   --shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
 }
+
+.legal-footer {
+  max-width: 1180px;
+  margin: 0 auto 2rem;
+  padding: 1rem 1.25rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.65;
+}
+
+.legal-footer p {
+  margin: 0.2rem 0;
+}
+
+.legal-footer a {
+  color: var(--accent);
+  text-underline-offset: 0.2em;
+}
 * { box-sizing: border-box; }
 /* Any class that sets its own `display` silently beats the UA's [hidden]
    rule (author rules always win). That bug shipped twice (.preview-modal,
@@ -456,4 +474,3 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   color: var(--muted);
   font-size: 13px;
 }
-

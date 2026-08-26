@@ -115,6 +115,12 @@ See `docs/GITHUB_SECRETS_CLOUDFLARE_KO.md` for GitHub Actions Cloudflare secret 
 See `docs/PRIVACY_KO.md` for the local-processing/privacy note.
 Use `docs/CLOUDFLARE_PRIVATE_CHECKLIST_KO.md` when creating the private Cloudflare Pages app.
 
+## License and third-party code
+
+- OptimizerZero source: [MIT License](LICENSE)
+- Bundled web libraries and optional desktop dependencies: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+- Optimized output remains the user's content. Users must have the right to process and redistribute their input files; this tool does not grant rights in third-party content.
+
 ## Safety Model
 
 - no original deletion by default
@@ -122,7 +128,10 @@ Use `docs/CLOUDFLARE_PRIVATE_CHECKLIST_KO.md` when creating the private Cloudfla
 - no archive extraction into user folders
 - no path traversal writes
 - encrypted ZIP entries are rejected
+- ZIP/TAR links and special entries are rejected so a verified result cannot preserve an escaping link target
+- archive entry count, expanded bytes, compression ratio, decoded image pixels, and PDF raster pixels have hard safety budgets
 - EPUB `mimetype` entry is preserved
 - output is verified before it is kept
 - larger outputs are skipped unless explicitly allowed
 - CLI refuses `--in-place` unless `--yes` is provided
+- `--in-place` refuses an existing backup path instead of following or overwriting it

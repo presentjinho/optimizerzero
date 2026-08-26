@@ -16,6 +16,7 @@ from optimizerzero.core import (
     LossBudget,
     Goal,
     Profile,
+    accept_candidate,
     analyze_files,
     dimension_ladder,
     discover_files,
@@ -543,6 +544,50 @@ class CoreTests(unittest.TestCase):
             _pdf_filter_is_dct(pikepdf.Array([pikepdf.Name("/FlateDecode"), pikepdf.Name("/DCTDecode")]))
         )
         self.assertFalse(_pdf_filter_is_dct(None))
+
+    def test_zip_symlink_entry_is_rejected(self):
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "links.zip"
+            info = zipfile.ZipInfo("safe-looking-link")
+            info.create_system = 3
+            info.external_attr = (0o120777 << 16)
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr(info, "../../outside.txt")
+
+            ok, message = validate_file(path)
+
+            self.assertFalse(ok)
+            self.assertIn("links are not supported", message)
+
+    def test_tar_link_entry_is_rejected(self):
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "links.tar"
+            with tarfile.open(path, "w") as archive:
+                link = tarfile.TarInfo("safe-looking-link")
+                link.type = tarfile.SYMTYPE
+                link.linkname = "../../outside.txt"
+                archive.addfile(link)
+
+            ok, message = validate_file(path)
+
+            self.assertFalse(ok)
+            self.assertIn("special entries are not supported", message)
+
+    def test_in_place_refuses_existing_backup_path(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            source = root / "source.bin"
+            candidate = root / "candidate.bin"
+            backup = root / "source.bin.ozero-bak"
+            source.write_bytes(b"original" * 20)
+            candidate.write_bytes(b"small")
+            backup.write_bytes(b"do-not-overwrite")
+
+            with self.assertRaises(FileExistsError):
+                accept_candidate(source, candidate, source, OptimizeOptions(in_place=True))
+
+            self.assertEqual(backup.read_bytes(), b"do-not-overwrite")
+            self.assertTrue(candidate.exists())
 
 
 @unittest.skipUnless(HEIF_AVAILABLE, "pillow-heif not installed")

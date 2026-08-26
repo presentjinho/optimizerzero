@@ -5,9 +5,11 @@ import io
 import json
 import os
 import shutil
+import stat
 import tarfile
 import tempfile
 import time
+import warnings
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
@@ -17,8 +19,9 @@ from typing import Iterable
 
 from PIL import Image, ImageFile, ImageOps
 
-Image.MAX_IMAGE_PIXELS = 160_000_000
+Image.MAX_IMAGE_PIXELS = 80_000_000
 ImageFile.LOAD_TRUNCATED_IMAGES = False
+warnings.simplefilter("error", Image.DecompressionBombWarning)
 
 try:
     import pillow_heif
@@ -41,6 +44,10 @@ IMAGE_OPTIMIZABLE_CONTAINER_EXTS = ZIP_CONTAINER_EXTS
 OFFICE_EXTS = {".docx", ".pptx", ".xlsx", ".odt", ".ods", ".odp"}
 DEFAULT_IGNORE_DIRS = {".git", ".hg", ".svn", ".venv", "__pycache__", "build", "dist", "node_modules", "releases"}
 DEFAULT_IGNORE_SUFFIXES = {".pyc", ".pyo"}
+ARCHIVE_MAX_MEMBERS = 10_000
+ARCHIVE_MAX_ENTRY_BYTES = 512 * 1024 * 1024
+ARCHIVE_MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
+ARCHIVE_MAX_COMPRESSION_RATIO = 1_000
 
 
 class Profile(str, Enum):
@@ -407,11 +414,49 @@ def zip_info_for(name: str, compress_type: int, source: zipfile.ZipInfo | None =
     return info
 
 
+def validate_zip_members(infos: list[zipfile.ZipInfo]) -> None:
+    files = [info for info in infos if not info.is_dir()]
+    if len(files) > ARCHIVE_MAX_MEMBERS:
+        raise ValueError(f"archive has too many entries ({len(files)} > {ARCHIVE_MAX_MEMBERS})")
+    total = 0
+    for info in files:
+        safe_zip_name(info.filename)
+        mode = info.external_attr >> 16
+        if stat.S_IFMT(mode) == stat.S_IFLNK:
+            raise ValueError(f"archive links are not supported: {info.filename}")
+        if info.file_size > ARCHIVE_MAX_ENTRY_BYTES:
+            raise ValueError(f"archive entry is too large: {info.filename}")
+        total += info.file_size
+        if total > ARCHIVE_MAX_TOTAL_BYTES:
+            raise ValueError("archive expands beyond the safe total-size limit")
+        if info.file_size and info.compress_size == 0:
+            raise ValueError(f"archive entry has an invalid compression ratio: {info.filename}")
+        if info.compress_size and info.file_size / info.compress_size > ARCHIVE_MAX_COMPRESSION_RATIO:
+            raise ValueError(f"archive entry compression ratio is too high: {info.filename}")
+
+
+def validate_tar_members(members: list[tarfile.TarInfo]) -> None:
+    if len(members) > ARCHIVE_MAX_MEMBERS:
+        raise ValueError(f"archive has too many entries ({len(members)} > {ARCHIVE_MAX_MEMBERS})")
+    total = 0
+    for member in members:
+        safe_zip_name(member.name)
+        if not (member.isfile() or member.isdir()):
+            raise ValueError(f"archive links and special entries are not supported: {member.name}")
+        if member.isfile():
+            if member.size > ARCHIVE_MAX_ENTRY_BYTES:
+                raise ValueError(f"archive entry is too large: {member.name}")
+            total += member.size
+            if total > ARCHIVE_MAX_TOTAL_BYTES:
+                raise ValueError("archive expands beyond the safe total-size limit")
+
+
 def validate_zip(path: Path, expected_names: set[str] | None = None) -> tuple[bool, str]:
     if not zipfile.is_zipfile(path):
         return False, "not a zip container"
     try:
         with zipfile.ZipFile(path, "r") as archive:
+            validate_zip_members(archive.infolist())
             bad = archive.testzip()
             if bad:
                 return False, f"bad entry: {bad}"
@@ -429,7 +474,9 @@ def validate_tar(path: Path, expected_names: set[str] | None = None) -> tuple[bo
     try:
         names: set[str] = set()
         with tarfile.open(path, "r:*") as archive:
-            for member in archive.getmembers():
+            members = archive.getmembers()
+            validate_tar_members(members)
+            for member in members:
                 clean_name = safe_zip_name(member.name)
                 if member.isfile():
                     names.add(clean_name)
@@ -588,6 +635,7 @@ def optimize_zip_container(source: Path, target: Path, options: OptimizeOptions)
     expected_names: set[str] = set()
     with zipfile.ZipFile(source, "r") as zin, zipfile.ZipFile(target, "w", compresslevel=9) as zout:
         infos = zin.infolist()
+        validate_zip_members(infos)
         if any(info.flag_bits & 0x1 for info in infos):
             return False, "encrypted ZIP entries are not supported"
         for index, info in enumerate(infos):
@@ -631,7 +679,9 @@ def optimize_tar_container(source: Path, target: Path) -> tuple[bool, str]:
     expected_names: set[str] = set()
     extension = extension_for_path(target)
     with tarfile.open(source, "r:*") as tin, tarfile.open(target, tar_write_mode(extension)) as tout:
-        for member in tin.getmembers():
+        members = tin.getmembers()
+        validate_tar_members(members)
+        for member in members:
             clean_name = safe_zip_name(member.name)
             member.name = clean_name
             fileobj = tin.extractfile(member) if member.isfile() else None
@@ -900,7 +950,13 @@ def accept_candidate(source: Path, candidate: Path, final_output: Path, options:
     final_output.parent.mkdir(parents=True, exist_ok=True)
     if options.in_place:
         backup = source.with_name(f"{source.name}.ozero-bak")
-        shutil.copy2(source, backup)
+        if backup.exists() or backup.is_symlink():
+            raise FileExistsError(f"refusing to replace existing backup path: {backup}")
+        with source.open("rb") as src, backup.open("xb") as dst:
+            shutil.copyfileobj(src, dst)
+            dst.flush()
+            os.fsync(dst.fileno())
+        shutil.copystat(source, backup, follow_symlinks=False)
         try:
             move_file(candidate, source)
             backup.unlink(missing_ok=True)

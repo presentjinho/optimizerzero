@@ -358,7 +358,7 @@ class WebAssetTests(unittest.TestCase):
         self.assertNotIn("push:", workflow)
         self.assertIn("CLOUDFLARE_API_TOKEN", workflow)
         self.assertIn("CLOUDFLARE_ACCOUNT_ID", workflow)
-        self.assertIn("cloudflare/wrangler-action@v4", workflow)
+        self.assertRegex(workflow, r"cloudflare/wrangler-action@[0-9a-f]{40} # v4")
         self.assertIn("pages deploy web --project-name optimizerzero", workflow)
 
     def test_ci_workflow_checks_main_and_pull_requests(self):
@@ -639,6 +639,31 @@ class WebAssetTests(unittest.TestCase):
         self.assertIn('.replace(/\\.[^.]+$/, ".ozero.cbz")', core)
         # OS junk files (Thumbs.db etc.) alongside images shouldn't block detection
         self.assertIn("IGNORABLE_ZIP_ENTRY_NAMES", core)
+
+    def test_web_rejects_archive_expansion_bombs_and_links(self):
+        core = self.read("optimize-core.js")
+
+        self.assertIn("function validateArchiveBudget(files)", core)
+        self.assertIn("ARCHIVE_MAX_TOTAL_BYTES", core)
+        self.assertIn("ARCHIVE_MAX_COMPRESSION_RATIO", core)
+        self.assertIn("entry.unixPermissions", core)
+        self.assertIn("validateArchiveBudget(source.files);", core)
+
+    def test_web_bounds_decoded_image_and_pdf_pixels(self):
+        core = self.read("optimize-core.js")
+
+        self.assertIn("MAX_DECODED_IMAGE_PIXELS", core)
+        self.assertIn("MAX_PDF_PAGE_PIXELS", core)
+        self.assertIn("MAX_PDF_TOTAL_PIXELS", core)
+        self.assertIn("image.close();", core)
+
+    def test_public_app_exposes_privacy_and_license_notices(self):
+        html = self.read("index.html")
+
+        self.assertIn('class="legal-footer"', html)
+        self.assertIn('href="./PRIVACY.md"', html)
+        self.assertIn("THIRD_PARTY_NOTICES.md", html)
+        self.assertTrue((ROOT / "THIRD_PARTY_NOTICES.md").exists())
 
     def test_web_javascript_syntax(self):
         for script in ("app.js", "optimize-core.js", "worker.js", "service-worker.js"):

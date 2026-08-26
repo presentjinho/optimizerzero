@@ -19,6 +19,7 @@ Static browser version for Netlify-style sharing.
 - Rejected-file feedback and total saved percentage
 - No server upload
 - JSZip and pdf-lib are vendored locally under `vendor/`, so the app does not need an external CDN after deploy
+- Archive member counts, expanded bytes, compression ratios, link entries, decoded image pixels, and PDF raster pixels are bounded before expensive processing continues.
 
 See `PRIVACY.md` for the local-processing/privacy note.
 
