@@ -24,6 +24,10 @@ It is user-centered: start with one practical goal, then tune limits only when n
 
 ## Quick Start
 
+Python 3.11 or newer and Pillow 13 or newer are required.
+The Windows artifact built by CI uses Python 3.12 and Pillow 13 or newer.
+For an existing Python 3.10 installation, follow the [virtual environment migration guide](docs/PYTHON_UPGRADE_KO.md) before updating.
+
 ```powershell
 python -m optimizerzero scan "D:\Files"
 python -m optimizerzero analyze "D:\Files" --recursive --verify
