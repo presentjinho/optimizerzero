@@ -24,6 +24,9 @@ It is user-centered: start with one practical goal, then tune limits only when n
 
 ## Quick Start
 
+Use Python 3.11 or newer for the current image parser. Python 3.10 remains a
+compatibility path on Pillow 12.3; Python 3.11+ uses Pillow 13 or newer.
+
 ```powershell
 python -m optimizerzero scan "D:\Files"
 python -m optimizerzero analyze "D:\Files" --recursive --verify
