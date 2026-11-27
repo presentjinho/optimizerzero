@@ -26,6 +26,7 @@ It is user-centered: start with one practical goal, then tune limits only when n
 
 Use Python 3.11 or newer for the current image parser. Python 3.10 remains a
 compatibility path on Pillow 12.3; Python 3.11+ uses Pillow 13 or newer.
+The Windows artifact built by CI uses Python 3.12 and Pillow 13 or newer.
 
 ```powershell
 python -m optimizerzero scan "D:\Files"
